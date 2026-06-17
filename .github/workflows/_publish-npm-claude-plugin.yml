@@ -1,26 +1,18 @@
 name: _publish-npm-claude-plugin
 
-# Reusable: publish @temporal-architect/claude-plugin to npm.
-#
-# This is the payload package that Claude Code's marketplace mechanism
-# fetches when a user installs the temporal-architect plugin. The marketplace
-# catalog at .claude-plugin/marketplace.json declares the plugin's
-# components inline (strict: false) and points at this npm package as the
-# source of the skills/ payload.
-#
-# `make build-claude-plugin` rsyncs skills/ from the repo root into the
-# package's gitignored skills/ directory before publishing.
+# Reusable: publish @temporal-architect/claude-plugin to npm — the payload
+# Claude Code's marketplace fetches on plugin install. Stages skills/ from the
+# toolchain Release skills tarball.
 
 on:
   workflow_call:
     inputs:
       version:
-        description: "Git tag including leading 'v', e.g. 'v0.3.2'."
+        description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
     secrets:
       NPM_TOKEN:
-        description: "npm automation token with publish access to @temporal-architect/*."
         required: true
 
 jobs:
@@ -29,15 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
-
-      - name: Stage skills payload
-        run: make build-claude-plugin
-
+      - name: Fetch + stage skills payload
+        run: |
+          make fetch-release VERSION=${{ inputs.version }}
+          make stamp-versions VERSION=${{ inputs.version }}
+          make build-claude-plugin VERSION=${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish
         working-directory: packages/npm/claude-plugin
         run: npm publish --access public

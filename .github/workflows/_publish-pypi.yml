@@ -1,19 +1,17 @@
 name: _publish-pypi
 
-# Reusable: build a platform-tagged wheel per platform, then upload all wheels
-# to PyPI as a single twine batch. Consumes twf-bin-* artifacts uploaded by
-# _build-binaries.yml.
+# Reusable: build a platform-tagged wheel per platform from the toolchain
+# Release binaries, then upload all wheels to PyPI as a single twine batch.
 
 on:
   workflow_call:
     inputs:
       version:
-        description: "Git tag including leading 'v', e.g. 'v0.3.2'."
+        description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
     secrets:
       PYPI_TOKEN:
-        description: "PyPI API token (project-scoped to twf-cli)."
         required: true
 
 jobs:
@@ -23,45 +21,26 @@ jobs:
     strategy:
       matrix:
         include:
-          - vsce_target: darwin-arm64
-            goos: darwin
-            pypi_tag: macosx_11_0_arm64
-          - vsce_target: darwin-x64
-            goos: darwin
-            pypi_tag: macosx_10_15_x86_64
-          - vsce_target: linux-x64
-            goos: linux
-            pypi_tag: manylinux2014_x86_64
-          - vsce_target: linux-arm64
-            goos: linux
-            pypi_tag: manylinux2014_aarch64
-          - vsce_target: win32-x64
-            goos: windows
-            pypi_tag: win_amd64
+          - { vsce_target: darwin-arm64, goos: darwin, goarch: arm64, pypi_tag: macosx_11_0_arm64 }
+          - { vsce_target: darwin-x64, goos: darwin, goarch: amd64, pypi_tag: macosx_10_15_x86_64 }
+          - { vsce_target: linux-x64, goos: linux, goarch: amd64, pypi_tag: manylinux2014_x86_64 }
+          - { vsce_target: linux-arm64, goos: linux, goarch: arm64, pypi_tag: manylinux2014_aarch64 }
+          - { vsce_target: win32-x64, goos: windows, goarch: amd64, pypi_tag: win_amd64 }
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-
       - run: pip install build wheel
-
-      - name: Download raw twf binary
-        uses: actions/download-artifact@v4
-        with:
-          name: twf-bin-${{ matrix.vsce_target }}
-          path: packages/vscode/bin/
-
-      - name: Restore binary executable bit
-        if: matrix.goos != 'windows'
-        run: chmod +x packages/vscode/bin/twf
-
+      - name: Fetch + stamp
+        run: |
+          make fetch-release VERSION=${{ inputs.version }}
+          make stamp-versions VERSION=${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Build wheel
-        run: make build-pypi-wheel PLATFORM_TAG=${{ matrix.pypi_tag }} GOOS=${{ matrix.goos }}
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
+        run: make build-pypi-wheel PLATFORM_TAG=${{ matrix.pypi_tag }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ inputs.version }}
+      - uses: actions/upload-artifact@v4
         with:
           name: pypi-wheel-${{ matrix.vsce_target }}
           path: packages/pypi/twf-cli/dist/*.whl
@@ -72,19 +51,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-
       - run: pip install twine
-
       - uses: actions/download-artifact@v4
         with:
           pattern: pypi-wheel-*
           path: packages/pypi/twf-cli/dist/
           merge-multiple: true
-
       - name: Publish to PyPI
         run: make publish-pypi
         env:

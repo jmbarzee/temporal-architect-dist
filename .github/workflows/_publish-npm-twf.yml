@@ -1,22 +1,21 @@
 name: _publish-npm-twf
 
 # Reusable: publish @temporal-architect/twf and its 5 platform sub-packages.
-# Consumes twf-bin-* artifacts uploaded by _build-binaries.yml.
+# Stages each platform binary from the toolchain Release archives.
 #
-# Order: sub-packages publish first (in parallel via matrix), wrapper publishes
-# last. npm rejects the wrapper if its optionalDependencies reference versions
-# that don't exist yet.
+# Order: sub-packages publish first (parallel matrix), wrapper publishes last.
+# npm rejects the wrapper if its optionalDependencies reference versions that
+# don't exist yet.
 
 on:
   workflow_call:
     inputs:
       version:
-        description: "Git tag including leading 'v', e.g. 'v0.3.2'."
+        description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
     secrets:
       NPM_TOKEN:
-        description: "npm automation token with publish access to @temporal-architect/*."
         required: true
 
 jobs:
@@ -26,36 +25,25 @@ jobs:
     strategy:
       matrix:
         include:
-          - vsce_target: darwin-arm64
-            goos: darwin
-          - vsce_target: darwin-x64
-            goos: darwin
-          - vsce_target: linux-x64
-            goos: linux
-          - vsce_target: linux-arm64
-            goos: linux
-          - vsce_target: win32-x64
-            goos: windows
+          - { vsce_target: darwin-arm64, goos: darwin, goarch: arm64 }
+          - { vsce_target: darwin-x64, goos: darwin, goarch: amd64 }
+          - { vsce_target: linux-x64, goos: linux, goarch: amd64 }
+          - { vsce_target: linux-arm64, goos: linux, goarch: arm64 }
+          - { vsce_target: win32-x64, goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
-
-      - name: Download raw twf binary
-        uses: actions/download-artifact@v4
-        with:
-          name: twf-bin-${{ matrix.vsce_target }}
-          path: packages/vscode/bin/
-
-      - name: Restore binary executable bit
-        if: matrix.goos != 'windows'
-        run: chmod +x packages/vscode/bin/twf
-
+      - name: Fetch + stamp
+        run: |
+          make fetch-release VERSION=${{ inputs.version }}
+          make stamp-versions VERSION=${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish npm sub-package
-        run: make publish-npm-platform VSCE_TARGET=${{ matrix.vsce_target }} GOOS=${{ matrix.goos }}
+        run: make publish-npm-platform VSCE_TARGET=${{ matrix.vsce_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ inputs.version }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -65,12 +53,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
-
+      - name: Stamp
+        run: make stamp-versions VERSION=${{ inputs.version }}
       - name: Publish wrapper
         run: make publish-npm
         env:

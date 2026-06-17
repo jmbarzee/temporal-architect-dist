@@ -1,7 +1,7 @@
 name: _publish-vsix
 
-# Reusable: publish all platform VSIXes to VS Code Marketplace + Open VSX.
-# Consumes vsix-* artifacts uploaded by _build-binaries.yml.
+# Reusable: build per-platform VSIXes from the toolchain Release assets (binary +
+# webview bundle + skills), then publish to VS Code Marketplace + Open VSX.
 #
 # The two registries publish in INDEPENDENT jobs: a failure on one (e.g. an
 # expired VS Code Marketplace PAT) must never block or skip the other. Open VSX
@@ -11,20 +11,51 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "Git tag including leading 'v', e.g. 'v0.3.2'."
+        description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
     secrets:
       VSCE_TOKEN:
-        description: "VS Code Marketplace personal access token."
         required: true
       OVSX_TOKEN:
-        description: "Open VSX namespace token."
         required: true
 
 jobs:
+  build:
+    name: Build VSIX (${{ matrix.vsce_target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { vsce_target: darwin-arm64, goos: darwin, goarch: arm64 }
+          - { vsce_target: darwin-x64, goos: darwin, goarch: amd64 }
+          - { vsce_target: linux-x64, goos: linux, goarch: amd64 }
+          - { vsce_target: linux-arm64, goos: linux, goarch: arm64 }
+          - { vsce_target: win32-x64, goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch + stage release assets
+        run: |
+          make fetch-release VERSION=${{ inputs.version }}
+          make stamp-versions VERSION=${{ inputs.version }}
+          make stage-skills VERSION=${{ inputs.version }}
+          make stage-webview VERSION=${{ inputs.version }}
+          make build-extension VERSION=${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Package platform VSIX
+        run: make package-platform VSCE_TARGET=${{ matrix.vsce_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ inputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.vsce_target }}
+          path: packages/vscode/*.vsix
+
   vscode-marketplace:
     name: Publish to VS Code Marketplace
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +74,7 @@ jobs:
 
   open-vsx:
     name: Publish to Open VSX
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,101 @@
+name: Consume Release
+
+# Entry point. Fired by the toolchain repo (jmbarzee/temporal-architect) via
+# repository_dispatch after it cuts a GitHub Release. The payload carries the
+# version; this repo downloads that Release's assets, stamps the version into
+# every manifest, repackages, and publishes to every registry in lockstep.
+#
+# Manual re-run: use the "Run workflow" button (workflow_dispatch) with a
+# version, e.g. to re-publish a channel that failed.
+
+on:
+  repository_dispatch:
+    types: [toolchain-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Toolchain release version to consume, e.g. v0.3.2"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          V="${{ github.event.client_payload.version || inputs.version }}"
+          if [ -z "$V" ]; then echo "No version in dispatch payload or input"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Consuming toolchain release $V"
+
+  check-versions:
+    needs: resolve-version
+    uses: ./.github/workflows/_check-versions.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+
+  publish-vsix:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-vsix.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+      OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+
+  publish-npm-wire-types:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-npm-wire-types.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-npm-visualizer:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-npm-visualizer.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-npm-twf:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-npm-twf.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pypi:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-pypi.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+  publish-npm-claude-plugin:
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-npm-claude-plugin.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-brew:
+    # The toolchain Release already exists (it triggered this run), so the
+    # formula's URLs + SHAs are pinnable immediately.
+    needs: [resolve-version, check-versions]
+    uses: ./.github/workflows/_publish-brew.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

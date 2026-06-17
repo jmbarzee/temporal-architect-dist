@@ -22,8 +22,8 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/jmbarzee/temporal-architect"
-Source = "https://github.com/jmbarzee/temporal-architect"
-Issues = "https://github.com/jmbarzee/temporal-architect/issues"
+Source = "https://github.com/jmbarzee/temporal-architect-dist"
+Issues = "https://github.com/jmbarzee/temporal-architect-dist/issues"
 
 [project.scripts]
 twf = "twf_cli.__main__:main"

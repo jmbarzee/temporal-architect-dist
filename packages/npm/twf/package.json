@@ -3,10 +3,10 @@
   "version": "0.8.4",
   "description": "Toolchain for designing and validating entire Temporal systems in `.twf` — CLI, language server, and MCP server.",
   "license": "MIT",
-  "homepage": "https://github.com/jmbarzee/temporal-architect/tree/main/packages/npm/twf",
+  "homepage": "https://github.com/jmbarzee/temporal-architect",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jmbarzee/temporal-architect",
+    "url": "https://github.com/jmbarzee/temporal-architect-dist",
     "directory": "packages/npm/twf"
   },
   "bugs": {
