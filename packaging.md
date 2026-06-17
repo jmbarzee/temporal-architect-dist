@@ -7,9 +7,10 @@ How temporal-architect ships — the catalog of distribution channels, the conve
 > The **toolchain repo** (`jmbarzee/temporal-architect`) is the engine: it builds the source
 > and cuts a single GitHub Release of primitive artifacts (per-platform `twf` binaries,
 > `skills-vX.Y.Z.tar.gz`, the visualizer lib + webview bundle, the
-> `@temporal-architect/wire-types` tarball, `SHA256SUMS`, `install.sh`), then fires a
+> `@temporal-architect/wire-types` tarball, `SHA256SUMS`), then fires a
 > `repository_dispatch` carrying the version. This repo stamps that version into its
-> manifests and publishes in lockstep.
+> manifests and publishes in lockstep. The curl-bash `install.sh` lives in this repo
+> (served via raw URL) and downloads the binary from that Release.
 >
 > The `_publish-*` workflows, registry secrets, and packaging manifests
 > (`packages/vscode`, `packages/npm`, `packages/pypi`, `.claude-plugin`, `bump-brew`) live
@@ -66,7 +67,7 @@ release.yml (release-cutter)
   +-- _build-binaries          matrix: 5 platforms; twf binary archives
   +-- _build-skills-tarball    deterministic skills-vX.Y.Z.tar.gz asset
   +-- _build-artifacts         visualizer lib + webview bundle + wire-types tarballs
-  +-- _publish-github-release  SHA256SUMS + all assets + install.sh
+  +-- _publish-github-release  SHA256SUMS + all assets (binaries, skills, visualizer, wire-types)
   +-- dispatch-dist            repository_dispatch {version} -> dist repo (DIST_DISPATCH_TOKEN)
         |
         v
@@ -156,42 +157,12 @@ The dev-cycle harness (the `.claude/skills/dev-cycle/` skill plus its manifest `
 
 ## Goals
 
-### M1 — Self-describing binary
-
-Embed skills in the `twf` binary and add a `twf skill` subcommand mirroring `twf spec`. Add a `compatibility:` field to each `SKILL.md` (the official Agent Skills spec field for declaring tool dependencies).
-
-| | Work | Effort |
-|---|---|---|
-| 1.1 | New module `tools/skills/` with `//go:embed skills/**` and `Skills()` / `Get(name)` / `Open(name, path)`. Pattern: clone `tools/spec/spec.go`. | S |
-| 1.2 | New `tools/lsp/cmd/twf/skill.go`: `twf skill`, `twf skill list`, `twf skill <name>`, `twf skill <name>/<file>`. Pattern: clone `tools/lsp/cmd/twf/spec.go`. | S |
-| 1.3 | Test mirroring `tools/spec/spec_test.go`: each embedded skill has a `SKILL.md`, valid YAML frontmatter, `name` matches directory name. | S |
-| 1.4 | Wire `tools/skills/` into `go.work` and `tools/lsp/go.mod` (relative `replace`). | S |
-| 1.5 | Add `compatibility:` field to `skills/temporal-architect-design/SKILL.md` and `skills/temporal-architect-author-go/SKILL.md`. | S |
-| 1.6 | Update `tools/lsp/cmd/twf/README.md`. | S |
-
-**Acceptance:** `twf skill` prints index; `twf skill list` enumerates; `twf skill design` prints `SKILL.md`; `twf skill design/reference/notation-reference.md` prints that file.
-
-**Effort:** ~1 day.
-
-### M2 — MCP server
-
-`twf mcp` subcommand. Tools wrap existing subcommands; resources expose embedded spec + skills; prompts expose skill `SKILL.md` bodies.
-
-**Open decision at start of M2:** Go MCP library — `mark3labs/mcp-go` vs `modelcontextprotocol/go-sdk`. Both meet the stdio + tools + resources + prompts needs. Spike both for ~2h.
-
-| | Work | Effort |
-|---|---|---|
-| 2.1 | Pick Go MCP library. | S |
-| 2.2 | New `tools/lsp/cmd/twf/mcp.go` registering the server. | M |
-| 2.3 | **Tools**: `twf_check`, `twf_parse`, `twf_symbols`, `twf_spec_list`, `twf_spec_get`, `twf_skill_list`, `twf_skill_get`. | M |
-| 2.4 | **Resources**: `twf://spec/<slug>` per spec section; `twf://skill/<name>` and `twf://skill/<name>/<file>` per skill. | M |
-| 2.5 | **Prompts**: one per skill (`design`, `author-go`). | S |
-| 2.6 | Integration test driving the server via the MCP inspector. | M |
-| 2.7 | Docs: example MCP client configs for Claude Desktop, Cursor, Continue. | S |
-
-**Acceptance:** A real MCP client (Claude Desktop or Cursor) connects via `twf mcp`; calls `twf_check`; discovers spec/skill resources; loads the `design` prompt.
-
-**Effort:** ~2-3 days.
+> **Engine milestones live in the toolchain.** M1 (self-describing binary),
+> M2 (MCP server), and M4 (`twf init` scaffolder) are `twf` binary features —
+> they moved to the toolchain's
+> [`ROADMAP.md`](https://github.com/jmbarzee/temporal-architect/blob/main/ROADMAP.md).
+> What remains here are the distribution-side milestones: extension PATH wiring
+> (M3), go-live (M5), and the docs site (M6).
 
 ### M3 — Agent-discoverable binary on PATH
 
@@ -216,29 +187,13 @@ or runs full paths. (This was the reverse-engineering reflection's recurring fri
 **Why it matters (North Star):** keeping the AI out of "where is the tool" busywork is exactly the
 context-protection the project is built on.
 
-### M4 — `twf init` scaffolder
+### M5 — Go live (external accounts + first publish)
 
-New `twf init` subcommand that scaffolds a starter `.twf` project in any directory. Depends on M1 (uses embedded skills/templates).
+External event-driven. Stand up the remaining external accounts so the next tag
+push doesn't fail on new publish channels (see [External account checklist](#external-account-checklist)),
+then cut a `v*` tag to publish on every channel for the first time.
 
-| | Work | Effort |
-|---|---|---|
-| 4.1 | New `tools/lsp/cmd/twf/init.go`. Flags: `--name`, `--mcp`, `--language go`. | M |
-| 4.2 | Scaffolds (or appends to existing): `AGENTS.md`, `workflows.twf`, `Makefile`. Idempotent (delimited block on re-run). | M |
-| 4.3 | Embedded templates under `tools/skills/templates/`. | S |
-| 4.4 | Golden-file tests + round-trip (`twf init && twf check`). | S |
-
-**Acceptance:** `twf init` in an empty dir produces a project that passes `twf check`. Idempotent re-run.
-
-**Effort:** ~2 days.
-
-### M5 — Brand rename + go live
-
-External event-driven. Two sub-phases:
-
-- **M5a (whenever):** External account setup so the next tag push doesn't fail on new publish channels. See [External account checklist](#external-account-checklist).
-- **M5b (when brand is settled):** Bulk find-replace per [Rename inventory](#rename-inventory); create new external registrations; flip publishing.
-
-**Effort:** ~0.5 day for the actual flip, assuming external accounts are pre-staged and brand decisions are made.
+**Effort:** account creation latency plus one real-tag run; see [`publishing_setup.md`](./publishing_setup.md).
 
 ### M6 — GitHub Pages docs site (optional polish)
 
@@ -247,76 +202,6 @@ Static site from `tools/spec/sections/*.md` + `skills/**/*.md` + the standalone 
 **Recommended:** defer until M1-M5 are settled. Lowest leverage in the plan.
 
 **Effort:** ~1-2 days.
-
----
-
-## Rename inventory
-
-Every place the brand appears, internally and externally. Walk this checklist when the rename ships.
-
-**Not in scope of the rename:**
-
-- The CLI binary name: `twf`.
-- The DSL file extension: `.twf`.
-- The product the skills describe: `Temporal` (Temporal Technologies' platform). The skill `name` fields (`temporal-architect-design`, `temporal-architect-author-go`) carry the `temporal-architect` brand, but the body content references Temporal Technologies' platform — that usage stays.
-
-### Repo-internal references
-
-| Category | Files | What to change |
-|---|---|---|
-| Go module paths | `tools/lsp/go.mod`, `tools/spec/go.mod`, all `internal/release/*/go.mod` | `github.com/jmbarzee/temporal-architect/*` → new. Triggers cascade through Go imports. |
-| Go source imports | `tools/**/*.go`, `internal/release/**/*.go` | Mechanical: `goimports -w` after a `sed` pass. |
-| `go.work` | `go.work` | Module use-paths (if directories also move). |
-| npm manifests | `tools/visualizer/package.json` (shipped), `packages/npm/twf/package.json`, 5 sub-package manifests | `name`, `repository.url`, `repository.directory`, `homepage`. Sub-package `optionalDependencies` keys all change scope. |
-| Visualizer publish output | `tools/visualizer/dist-lib/lib.js`, `tools/visualizer/src/lib.ts`, `tools/visualizer/vite.lib.config.ts` | Rebuild after manifest change. |
-| PyPI manifest | `packages/pypi/twf-cli/pyproject.toml` | `name` (if package name itself changes), `urls.Homepage`, `urls.Source`. |
-| Homebrew formula template | `internal/release/bump-brew/main.go` | `homepage` literal, URL template (repo path). |
-| Claude Code plugin catalog | `.claude-plugin/marketplace.json` | `name`, `owner`, `homepage`, plugin source's npm package reference (`@temporal-architect/claude-plugin` → new scope). |
-| Claude Code plugin payload | `packages/npm/claude-plugin/package.json`, `packages/npm/claude-plugin/README.md` | `name`, `repository.url`, `homepage`. Package name change is the same scope rename as the rest of npm. |
-| VSIX extension | `packages/vscode/package.json` | `publisher` (if changing identity), `repository.url`. `name` (`twf-syntax`) likely stable. |
-| VSIX install instructions | `packages/vscode/README.md`, `packages/vscode/src/extension.ts` | Marketplace URL + `go install` URL. |
-| Install script | `packages/install.sh` | `REPO="jmbarzee/temporal-architect"` |
-| READMEs | `README.md`, `tools/README.md`, `tools/visualizer/README.md`, `tools/lsp/cmd/twf/README.md`, `tools/spec/README.md`, `skills/MANIFEST.md`, `skills/{design,author-go}/README.md`, `packages/README.md`, `internal/README.md`, `.claude-plugin/README.md` | All install lines, all `github.com/jmbarzee/temporal-architect` URLs, "Quick install" table. |
-| Repo-development guidance | `AGENTS.md` | Project-overview prose, file paths. |
-| Changelog | `CHANGELOG.md` | New entries use new URL; historical entries stay. |
-| Skill compatibility field (after M1) | `skills/temporal-architect-design/SKILL.md`, `skills/temporal-architect-author-go/SKILL.md` | Frontmatter `compatibility:` references new install lines. |
-| `twf init` templates (after M4) | `tools/skills/templates/AGENTS.md.tmpl`, etc. | The scaffolded AGENTS.md block, install instructions baked into templates. |
-| `.claude/skills/dev-cycle/` | `SKILL.md` + 13 `references/` prompts | Spot-check for brand-name mentions. Mostly relative paths. |
-| `.claude/skills/` | `expand-idea`, `reflect-skill` | Spot-check for brand-name mentions. |
-| `internal/harness/components.md` | 1 file | Component manifest; spot-check scopes/paths. |
-
-**Mechanical strategy:**
-
-1. `find . -type f \( -name '*.go' -o -name '*.json' -o -name '*.md' -o -name '*.ts' -o -name '*.toml' \) -exec sed -i '' 's|jmbarzee/temporal-architect|<new-owner>/<new-repo>|g' {} +`
-2. Same for `@temporal-architect/` → `@<new-scope>/`.
-3. `goimports -w ./...` to normalize Go imports.
-4. Rebuild every npm package (publish output baked from manifest).
-5. Run full test suite + `release.yml` dry-run on a branch.
-6. Spot-check Markdown for prose mentions of the brand.
-
-### External coordinates
-
-| Coordinate | Current | Rename behavior | Strategy |
-|---|---|---|---|
-| GitHub repo | `github.com/jmbarzee/temporal-architect` | Rename + URL redirect supported | Rename on GitHub; source-file URLs updated for cleanliness. |
-| GitHub Releases | All historical | Tied to repo; survives rename | No action — redirect handles it. |
-| npm scope `@temporal-architect` | Shipped (visualizer) | **Immutable** — cannot rename | Create new scope; publish under it; mark old as `deprecate` with pointer. |
-| `@temporal-architect/visualizer` | Shipped | Cannot rename | Final `0.x` release + `npm deprecate`; first release under new scope. |
-| `@temporal-architect/twf` | Shipped after first `M-` release | If rename before first publish: claim new name | If after: same deprecate-and-republish pattern. |
-| PyPI `twf-cli` | Pending first publish | **Immutable** | If rename before first publish: claim new name. If after: publish new name; yank old with redirect note. |
-| VS Code Marketplace `jmbarzee.twf-syntax` | Shipped | **Extension IDs immutable** (publisher.name) | New publisher + new extension; old becomes "deprecated, install [new]". |
-| Open VSX `jmbarzee/twf-syntax` | Shipped | Same as VS Code | Same strategy. |
-| Homebrew tap `jmbarzee/homebrew-twf` | Pending first publish | Can rename via GitHub | Easy: rename tap repo; users re-tap. |
-| Claude Code marketplace | GitHub-resolved | Follows repo rename | No action beyond repo URL. Users `/plugin marketplace add <new-owner>/<new-repo>`. |
-| Smithery MCP listing (post-M2) | Pending | Manual re-submission | Re-submit; deprecate old if applicable. |
-
-### Pre-rename decisions
-
-| # | Question | Why it matters |
-|---|---|---|
-| Q1 | Does the GitHub repo rename? | If yes: every URL across repo-internal and external coordinates updates. If no: only the npm/PyPI/etc. coordinates change. |
-| Q2 | Does the VS Code Marketplace publisher rename? | If yes: VSIX is effectively a new product (no install carryover). If no: just extension name changes. |
-| Q3 | Migrate existing users or just deprecate-and-forget? | Migration = deprecate-and-republish + clear migration docs. No migration = old listings become tombstones. |
 
 ---
 
@@ -360,33 +245,20 @@ What `release.yml`'s reusable workflows expect, in one place:
 
 Missing secrets fail the corresponding job with a clear "Error: <SECRET> not set" message; other jobs proceed independently.
 
-### Rename impact on registrations
-
-When the brand rename ships, the following need re-registering on top of the coordinate updates above:
-
-| Item | Action |
-|---|---|
-| npm scope | `npm org create <new-scope>`. Add publishing user as admin. Existing `NPM_TOKEN` works if same user; otherwise generate new. |
-| PyPI package | Register new package name. New `PYPI_TOKEN` scoped to new project. |
-| VS Code Marketplace publisher | If publisher itself renames: new account at dev.azure.com → new `VSCE_TOKEN`. Otherwise just `package.json` update. |
-| Open VSX publisher | Same as VS Code Marketplace. |
-| Homebrew tap repo | If owner changes: new tap repo; new `HOMEBREW_TAP_TOKEN`. |
-| Smithery | Re-submit with new install line; deprecate old. |
-
-The existing `@temporal-architect/visualizer` package on npm becomes a deprecated tombstone if the brand renames. Same dynamic for VS Code Marketplace and Open VSX extensions if publisher/extension IDs change. No way to forward-migrate installs at the registry layer.
-
 ---
 
 ## Suggested sequencing
 
-1. **M1** (~1 day). Mechanical, mirrors `tools/spec/` pattern. New module lands at `tools/skills/`.
-2. **M2** (~2-3 days). Pick MCP library; build server + tools/resources/prompts; verify with real MCP client.
-3. **M4** (~2 days). `twf init` scaffolder — depends on M1's embedded skills.
-4. **External account setup** — can happen any time; gates M5.
-5. **M5** when brand is decided and accounts exist. Walk Rename inventory + flip publishing.
-6. **M6** if there's appetite for a docs site.
+Engine milestones (M1, M2, M4) are sequenced in the toolchain
+[`ROADMAP.md`](https://github.com/jmbarzee/temporal-architect/blob/main/ROADMAP.md).
+Distribution-side, in order:
 
-Total remaining: ~5-7 focused-developer days plus the brand-rename event.
+1. **External account setup** (§ External account checklist) — can happen any time; gates the first publish.
+2. **Go live (M5)** — cut the next `v*` tag once external accounts exist; smoke-test each channel per [`publishing_setup.md`](./publishing_setup.md).
+3. **M6** if there's appetite for a docs site.
+
+Total remaining (distribution): external account setup + first publish, plus the optional docs site;
+engine milestones are tracked separately in the toolchain roadmap.
 
 ---
 

@@ -10,8 +10,13 @@ engine + the canonical Release; this is packaging.
 
 On each `v*` tag, the toolchain repo cuts a GitHub Release (per-platform `twf`
 binaries, `skills-vX.Y.Z.tar.gz`, the visualizer lib + webview bundle, the
-`@temporal-architect/wire-types` tarball, `SHA256SUMS`, `install.sh`) and fires a
+`@temporal-architect/wire-types` tarball, `SHA256SUMS`) and fires a
 `repository_dispatch` (`toolchain-release`, payload `{version}`) at this repo.
+
+The curl-bash installer [`packages/install.sh`](packages/install.sh) lives here and
+is served via raw URL
+(`https://raw.githubusercontent.com/jmbarzee/temporal-architect-dist/main/packages/install.sh`);
+it downloads the platform binary from the toolchain Release.
 
 [`_consume-release.yml`](.github/workflows/_consume-release.yml) then downloads
 those assets, stamps the version into every manifest, repackages, and publishes:
