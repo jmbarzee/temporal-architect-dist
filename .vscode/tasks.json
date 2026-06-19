@@ -20,6 +20,13 @@
       "isBackground": true,
       "label": "npm: watch - packages/vscode",
       "group": "build"
+    },
+    {
+      "type": "shell",
+      "command": "make dev",
+      "label": "make: dev",
+      "problemMatcher": "$tsc",
+      "detail": "Build the sibling toolchain into dist-assets, stage it (bin + webview + skills), and compile the extension"
     }
   ]
 }

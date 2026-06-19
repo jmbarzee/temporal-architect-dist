@@ -15,6 +15,21 @@ VER      := $(patsubst v%,%,$(VERSION))
 ASSETS  := dist-assets
 EXT_DIR := packages/vscode
 
+# Sibling toolchain checkout, used by `fetch-local`/`dev` for local F5 testing
+# against a live build (not a downloaded Release). Override if it lives elsewhere.
+TOOLCHAIN ?= ../temporal-architect
+
+# Local platform — defaults for the dev flow (fetch-local/dev). The release/
+# publish targets always pass GOOS/GOARCH explicitly per platform, so these
+# defaults only affect local-dev archive names.
+GOOS   ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
+
+# Dev version sourced from the sibling toolchain's `git describe` (leading "v"
+# stripped). The fetch-local/dev flow stamps this into the locally-built archive
+# names so the SAME stage-* pipeline a real Release uses works unchanged.
+DEV_VER := $(shell cd $(TOOLCHAIN) 2>/dev/null && git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+
 # label:GOOS:GOARCH — must match the toolchain's release matrix + archive names.
 PLATFORMS := \
 	darwin-arm64:darwin:arm64 \
@@ -42,8 +57,11 @@ fetch-release: require-version
 ## dist never tags; the version is the one carried in the dispatch payload).
 stamp-versions: require-version
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
-	@# Extension's published wire-types dependency pin -> the matching release.
-	@sed -i.bak 's|\("@temporal-architect/wire-types": *\)"[^"]*"|\1"$(VER)"|' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
+	@# Extension builds against the wire-types tarball downloaded from the toolchain
+	@# Release (make fetch-release), NOT the npm registry — this keeps the VSIX build
+	@# independent of the wire-types npm publish (same way the webview bundle is staged
+	@# from a Release asset). The file: path is relative to the extension package.json.
+	@sed -i.bak 's|\("@temporal-architect/wire-types": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-wire-types-$(VER).tgz"|' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/npm/twf/package.json && rm -f packages/npm/twf/package.json.bak
 	@for p in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do \
 		sed -i.bak "s|\"@temporal-architect/twf-$$p\": *\"[^\"]*\"|\"@temporal-architect/twf-$$p\": \"$(VER)\"|" packages/npm/twf/package.json && rm -f packages/npm/twf/package.json.bak; \
@@ -97,6 +115,34 @@ stage-webview: require-version
 	@mkdir -p $(EXT_DIR)/dist/webview
 	tar xzf $(ASSETS)/visualizer-webview-v$(VER).tar.gz -C $(EXT_DIR)/dist/webview
 	@echo "Staged webview bundle"
+
+# ── Local dev intake (build sibling toolchain → dist-assets) ─────────────────
+
+.PHONY: fetch-local dev
+
+## Dev twin of fetch-release: build the sibling toolchain's release archives for
+## the local platform and drop them into dist-assets/ — the SAME shape a real
+## Release download produces, so the stage-* pipeline below works unchanged. The
+## toolchain stays the only thing that builds source; this just routes its output
+## into the dist intake folder. Version is the toolchain's `git describe`.
+fetch-local:
+	@mkdir -p $(ASSETS)
+	$(MAKE) -C $(TOOLCHAIN) build-twf-archive pack-visualizer-webview build-skills-archive \
+		VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
+	cp $(TOOLCHAIN)/dist/twf-v$(DEV_VER)-$(GOOS)-$(GOARCH).tar.gz $(ASSETS)/
+	cp $(TOOLCHAIN)/dist/visualizer-webview-v$(DEV_VER).tar.gz $(ASSETS)/
+	cp $(TOOLCHAIN)/dist/skills-v$(DEV_VER).tar.gz $(ASSETS)/
+	@echo "Copied local toolchain archives into $(ASSETS)/ (v$(DEV_VER))"
+
+## One command to test the extension against a live build. Builds + copies the
+## toolchain archives into dist-assets/ (fetch-local), then runs the identical
+## stage-* pipeline a Release uses and compiles the extension TS. The whole F5
+## prep — the target behind the "Run Extension (Local Toolchain)" launch config.
+## Assumes the extension's node_modules are installed (`cd $(EXT_DIR) && npm install`).
+dev: fetch-local
+	$(MAKE) stage-binary stage-webview stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
+	cd $(EXT_DIR) && npm run compile
+	@echo "Extension ready — launch with F5 (Run Extension)"
 
 # ── VSIX (VS Code / Cursor / Open VSX) ───────────────────────────────────────
 
@@ -182,12 +228,15 @@ publish-npm-claude-plugin: build-claude-plugin
 .PHONY: publish-visualizer publish-wire-types
 
 ## Publish the visualizer lib tarball downloaded from the toolchain Release.
+## The leading "./" is load-bearing: without it npm reads "dist-assets/<file>.tgz"
+## as a GitHub "owner/repo" shorthand and tries to git-clone it.
 publish-visualizer: require-version
-	npm publish --access public $(ASSETS)/temporal-architect-visualizer-$(VER).tgz
+	npm publish --access public ./$(ASSETS)/temporal-architect-visualizer-$(VER).tgz
 
 ## Publish the wire-types tarball downloaded from the toolchain Release.
+## The leading "./" is load-bearing (see publish-visualizer).
 publish-wire-types: require-version
-	npm publish --access public $(ASSETS)/temporal-architect-wire-types-$(VER).tgz
+	npm publish --access public ./$(ASSETS)/temporal-architect-wire-types-$(VER).tgz
 
 # ── Homebrew tap ─────────────────────────────────────────────────────────────
 

@@ -14,6 +14,18 @@
       "preLaunchTask": "npm: compile - packages/vscode"
     },
     {
+      "name": "Run Extension (Local Toolchain)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/vscode/out/**/*.js"
+      ],
+      "preLaunchTask": "make: dev"
+    },
+    {
       "name": "Run Extension (No Build)",
       "type": "extensionHost",
       "request": "launch",

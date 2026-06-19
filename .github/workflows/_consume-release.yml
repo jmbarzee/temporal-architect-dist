@@ -42,6 +42,8 @@ jobs:
       version: ${{ needs.resolve-version.outputs.version }}
 
   publish-vsix:
+    # Independent of npm: the extension builds against the wire-types tarball from
+    # the toolchain Release (see Makefile stamp-versions), not the published package.
     needs: [resolve-version, check-versions]
     uses: ./.github/workflows/_publish-vsix.yml
     with:
