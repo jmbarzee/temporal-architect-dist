@@ -14,8 +14,10 @@ on:
 
 # Trusted publishing (OIDC) — no NPM_TOKEN. id-token:write must also be set on
 # the calling job in _consume-release.yml (npm validates the caller workflow).
-# No --provenance here: this re-publishes a tarball built in the toolchain repo,
-# so the package's repository.url would not match this (dist) repo.
+# Provenance is DISABLED here (NPM_CONFIG_PROVENANCE=false on the publish step):
+# trusted publishing auto-enables provenance, but this re-publishes a tarball
+# built in the TOOLCHAIN repo whose repository.url points there, so npm's
+# provenance repo-match check rejects it (E422). OIDC auth still applies.
 permissions:
   id-token: write
   contents: read
@@ -38,3 +40,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Publish downloaded tarball
         run: make publish-visualizer VERSION=${{ inputs.version }}
+        env:
+          NPM_CONFIG_PROVENANCE: "false"
