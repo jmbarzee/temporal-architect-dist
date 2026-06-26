@@ -185,11 +185,14 @@ publish-npm-platform: require-version stage-binary
 	@ext=""; if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
 		mkdir -p packages/npm/twf-$(VSCE_TARGET)/bin; \
 		cp $(EXT_DIR)/bin/twf$$ext packages/npm/twf-$(VSCE_TARGET)/bin/twf$$ext
-	cd packages/npm/twf-$(VSCE_TARGET) && npm publish
+	cd packages/npm/twf-$(VSCE_TARGET) && npm publish --provenance
 
 ## Publish the @temporal-architect/twf wrapper (AFTER all sub-packages exist).
+## --provenance: published via trusted publishing (OIDC) in CI; the in-repo
+## package's repository.url matches this repo. (Local runs without CI OIDC will
+## fail provenance — these targets are CI publish targets.)
 publish-npm:
-	cd packages/npm/twf && npm publish
+	cd packages/npm/twf && npm publish --provenance
 
 # ── PyPI wheel ───────────────────────────────────────────────────────────────
 
@@ -220,8 +223,9 @@ publish-pypi:
 build-claude-plugin: stage-skills
 
 ## Publish @temporal-architect/claude-plugin to npm.
+## (The reusable workflow publishes inline with --provenance; kept in sync here.)
 publish-npm-claude-plugin: build-claude-plugin
-	cd packages/npm/claude-plugin && npm publish
+	cd packages/npm/claude-plugin && npm publish --provenance
 
 # ── Re-publish prebuilt toolchain tarballs (no build) ────────────────────────
 

@@ -11,9 +11,14 @@ on:
         description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
-    secrets:
-      NPM_TOKEN:
-        required: true
+
+# Trusted publishing (OIDC) — no NPM_TOKEN. id-token:write must also be set on
+# the calling job in _consume-release.yml (npm validates the caller workflow).
+# No --provenance here: this re-publishes a tarball built in the toolchain repo,
+# so the package's repository.url would not match this (dist) repo.
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   publish:
@@ -23,13 +28,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Ensure npm supports OIDC (>= 11.5.1)
+        run: npm install -g npm@latest
       - name: Fetch release tarball
         run: make fetch-release VERSION=${{ inputs.version }}
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Publish downloaded tarball
         run: make publish-visualizer VERSION=${{ inputs.version }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
