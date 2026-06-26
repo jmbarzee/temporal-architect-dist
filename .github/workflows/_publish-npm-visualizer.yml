@@ -41,4 +41,6 @@ jobs:
       - name: Publish downloaded tarball
         run: make publish-visualizer VERSION=${{ inputs.version }}
         env:
+          # Skip auto-provenance: this tarball is built in the toolchain repo, so
+          # its repository.url won't match this repo and provenance fails (E422).
           NPM_CONFIG_PROVENANCE: "false"

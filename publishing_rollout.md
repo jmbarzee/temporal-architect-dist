@@ -7,8 +7,94 @@ pre-split, stale) status claims in [`publishing_setup.md`](./publishing_setup.md
 — keep that file for the PyPI/Homebrew account-creation *recipes*, which are still
 accurate. Design rationale lives in [`packaging.md`](./packaging.md).
 
-Last updated: 2026-06-17, during the first end-to-end test of the post-split
-pipeline (toolchain `v0.9.0`).
+Last updated: 2026-06-18 — **`v0.9.1` was the first fully-green end-to-end run:
+every channel published.** See § 0.
+
+---
+
+## 0. Status: COMPLETE (toolchain `v0.9.1`)
+
+The post-split pipeline is verified end-to-end. Cutting toolchain `v0.9.1`
+(`make release TYPE=patch`) drove a single dist `Consume Release` run in which
+**every job succeeded** and every channel published `0.9.1`:
+
+| Channel | Verified |
+|---|---|
+| npm `@temporal-architect/{wire-types,visualizer,twf + 5 sub-pkgs,claude-plugin}` | ✅ live `0.9.1` |
+| PyPI `twf-cli` (5 wheels) | ✅ live `0.9.1` |
+| Open VSX `jmbarzee.twf-syntax` (5 platforms) | ✅ published `0.9.1` (registry index lags a few min) |
+| VS Code Marketplace `jmbarzee.twf-syntax` (5 platforms) | ✅ published `0.9.1` (gallery lags a few min) |
+| Homebrew `jmbarzee/homebrew-twf` `Formula/twf.rb` | ✅ bumped to `0.9.1` |
+
+All five dist secrets are set (`OVSX_TOKEN`, `VSCE_TOKEN`, `NPM_TOKEN`,
+`PYPI_TOKEN`, `HOMEBREW_TAP_TOKEN`); the `homebrew-twf` tap repo exists. The
+§ 4 decouple/`./`-prefix fixes are merged on dist `main` (`c89cdc7`).
+
+**What got us here (chronological, beyond § 4):**
+- npm first publish needed a token that bypasses 2FA — a plain granular token
+  hit `E403`; a **Classic Automation** token fixed it.
+- npm also needed the `@temporal-architect` org scope set correctly (a wrong
+  scope failed all npm jobs even with a valid token).
+- PyPI bootstrapped with an account-scoped token (OIDC/trusted-publishing can't
+  create a new project), then narrowed to a project-scoped `twf-cli` token.
+- Open VSX / Marketplace account side was already done pre-split (namespace
+  `jmbarzee` verified, shipped through `0.8.4`); only the tokens had to move to
+  the dist repo.
+
+**Open follow-ups (hardening, not blockers):**
+- **npm OIDC trusted publishing — workflows authored (see § 0a), pending
+  per-package config on npmjs.com + first verification on `v0.9.2`.**
+- Per-channel install smoke tests (`publishing_setup.md § 3`): registry
+  resolution path, not just CI green.
+
+### 0a. npm OIDC trusted publishing (authored, pending config + verify)
+
+Migrates all 9 npm packages off the standing `NPM_TOKEN` to GitHub OIDC.
+
+**Workflow/Makefile changes (done, on dist working tree):**
+- `_consume-release.yml`: each `publish-npm-*` caller job now grants
+  `permissions: { id-token: write, contents: read }` and no longer passes
+  `NPM_TOKEN`.
+- All four `_publish-npm-*.yml`: top-level `id-token: write`, Node bumped 20→24,
+  `npm install -g npm@latest` (OIDC needs npm ≥ 11.5.1), `NODE_AUTH_TOKEN`
+  removed. `NPM_TOKEN` secret input dropped.
+- `--provenance` added for the **7 in-repo-built** packages (twf wrapper + 5
+  sub-pkgs + claude-plugin; their `repository.url` = this repo). **Not** added
+  for `wire-types`/`visualizer` — those re-publish tarballs built in the
+  toolchain repo, so a provenance repo-match would fail (OIDC auth still
+  applies).
+
+**Key fact:** npm validates the **calling** (top-level) workflow filename for
+reusable workflows, so every package's trusted publisher is configured as
+repo=`temporal-architect-dist`, workflow=`_consume-release.yml` (filename only,
+case-sensitive), environment blank. `id-token: write` is required on **both**
+the caller and the reusable workflow.
+
+**Still to do (manual, on npmjs.com — per package, all 9):** add a GitHub
+Actions trusted publisher (owner `jmbarzee`, repo `temporal-architect-dist`,
+workflow `_consume-release.yml`). Then cut `v0.9.2` to verify; once green,
+delete the now-unused `NPM_TOKEN` secret from the dist repo. OIDC only applies
+to *new* versions — it can't re-publish `0.9.1`.
+
+**`v0.9.2` first OIDC run — partial, two fixes applied:**
+- ✅ All 6 `twf` packages (5 sub-pkgs + wrapper) published via OIDC + provenance.
+  Proves trusted-publisher config + reusable-workflow caller-match + OIDC all work.
+- ❌→fix `wire-types` + `visualizer` (E422): **trusted publishing auto-enables
+  provenance** (the `--provenance` flag is irrelevant), and these re-publish
+  toolchain-built tarballs whose `repository.url` is the toolchain repo, so the
+  provenance repo-match failed. Fix: `NPM_CONFIG_PROVENANCE=false` on those two
+  publish steps (OIDC auth retained, provenance off).
+- ❌→fix `claude-plugin` (E404 "could not be found or you do not have
+  permission"): trusted-publisher mismatch for that one package (the other 6 use
+  the identical workflow config and succeeded). Fix is on npmjs.com — verify the
+  `@temporal-architect/claude-plugin` trusted publisher (repo
+  `temporal-architect-dist`, workflow `_consume-release.yml`, env blank).
+- `twf`/`claude-plugin` already published `0.9.2`, so re-verify on a fresh
+  `v0.9.3` (cleanest), or a `v0.9.2` consume re-run (twf/claude-plugin report
+  harmless "already published"; wire-types/visualizer/claude-plugin fill in).
+
+The sections below are retained as the historical diagnosis from the `v0.9.0`
+run that uncovered the bugs + missing secrets.
 
 ---
 
@@ -164,6 +250,10 @@ independently of npm.
 ---
 
 ## 5. Remaining work — secrets (on `jmbarzee/temporal-architect-dist`)
+
+> **Resolved as of `v0.9.1` — all five secrets are now set on the dist repo
+> (see § 0).** The table below is the original `v0.9.0` gap analysis, retained
+> for history.
 
 Every non-bug failure is a missing secret. After the split, secrets must be
 re-added to the **dist** repo (they previously lived on the toolchain). Store each
