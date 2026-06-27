@@ -8,7 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@temporal-architect/visualizer": "file:../../dist-assets/temporal-architect-visualizer-0.0.0.tgz",
+    "@temporal-architect/visualizer": "file:../../dist-assets/temporal-architect-visualizer-0.10.0-dirty.tgz",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

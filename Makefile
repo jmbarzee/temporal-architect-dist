@@ -120,7 +120,18 @@ stage-skills: require-version
 ## tarball, then installs + builds.
 build-webview: require-version
 	@sed -i.bak 's|\("@temporal-architect/visualizer": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-visualizer-$(VER).tgz"|' packages/webview/package.json && rm -f packages/webview/package.json.bak
-	cd packages/webview && npm install --no-audit --no-fund && npm run build
+	@# The dev flow reuses a constant git-describe --dirty version, so the
+	@# same-named local tarball changes content between runs. npm then either
+	@# skips it ("already satisfied") or trips EINTEGRITY against the committed
+	@# lock, leaving a STALE visualizer (and its styles.css) in the bundle.
+	@# Install the rest with the lock disabled (no integrity gate), then drop the
+	@# freshly-built lib straight into node_modules ourselves so its content is
+	@# always current. Release builds use unique versions and are unaffected.
+	cd packages/webview && npm install --no-audit --no-fund --no-package-lock
+	@rm -rf packages/webview/node_modules/@temporal-architect/visualizer
+	@mkdir -p packages/webview/node_modules/@temporal-architect/visualizer
+	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C packages/webview/node_modules/@temporal-architect/visualizer --strip-components=1
+	cd packages/webview && npm run build
 	@echo "Built webview bundle into $(EXT_DIR)/dist/webview"
 
 # ── Local dev intake (build sibling toolchain → dist-assets) ─────────────────
@@ -140,9 +151,11 @@ fetch-local:
 	@# npm pack names tarballs by the package's manifest version, which need not
 	@# equal the local git-describe DEV_VER; rename on copy so build-webview's
 	@# file: path (…-$(DEV_VER).tgz) resolves. The tarball's internal version is
-	@# untouched (npm reads contents, not filename).
-	cp $(TOOLCHAIN)/dist/temporal-architect-visualizer-*.tgz $(ASSETS)/temporal-architect-visualizer-$(DEV_VER).tgz
-	cp $(TOOLCHAIN)/dist/temporal-architect-wire-types-*.tgz $(ASSETS)/temporal-architect-wire-types-$(DEV_VER).tgz
+	@# untouched (npm reads contents, not filename). Pick the NEWEST match (the
+	@# one this run just packed) so a dist/ that still holds older-version
+	@# tarballs doesn't make the copy ambiguous.
+	cp "$$(ls -t $(TOOLCHAIN)/dist/temporal-architect-visualizer-*.tgz | head -1)" $(ASSETS)/temporal-architect-visualizer-$(DEV_VER).tgz
+	cp "$$(ls -t $(TOOLCHAIN)/dist/temporal-architect-wire-types-*.tgz | head -1)" $(ASSETS)/temporal-architect-wire-types-$(DEV_VER).tgz
 	cp $(TOOLCHAIN)/dist/skills-v$(DEV_VER).tar.gz $(ASSETS)/
 	@echo "Copied local toolchain archives into $(ASSETS)/ (v$(DEV_VER))"
 
