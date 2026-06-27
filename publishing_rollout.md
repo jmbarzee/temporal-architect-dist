@@ -7,15 +7,28 @@ pre-split, stale) status claims in [`publishing_setup.md`](./publishing_setup.md
 — keep that file for the PyPI/Homebrew account-creation *recipes*, which are still
 accurate. Design rationale lives in [`packaging.md`](./packaging.md).
 
-Last updated: 2026-06-26 — **library-vs-distribution split.** The two npm
-*libraries* (`visualizer`, `wire-types`) now publish from the **toolchain** repo,
-where their `repository.url` matches, so provenance succeeds and the
+Last updated: 2026-06-27 — **library-vs-distribution split: VERIFIED on `v0.10.0`.**
+The two npm *libraries* (`visualizer`, `wire-types`) now publish from the **toolchain**
+repo, where their `repository.url` matches, so provenance succeeds and the
 `NPM_CONFIG_PROVENANCE=false` workaround is retired. The VS Code **webview** is now
-built in this repo (`packages/webview`) from the visualizer library, so the toolchain
-no longer emits `visualizer-webview-*.tar.gz`. The previous fully-green OIDC run was
-`v0.9.3` (see § 0/0a, retained below). The trusted-publisher config for `visualizer` +
-`wire-types` must be repointed to `repo=temporal-architect, workflow=release.yml` before
-the next tag (see § 0a).
+built in this repo (`packages/webview`) from the visualizer library, so the toolchain no
+longer emits `visualizer-webview-*.tar.gz`.
+
+**`v0.10.0` outcome (first run on the new architecture, all green):**
+- Toolchain `release.yml`: `publish-npm-libs` published `wire-types@0.10.0` +
+  `visualizer@0.10.0` via OIDC; both now carry **SLSA provenance attestations**
+  (`slsa.dev/provenance/v1`) — the thing the old dist-republish path could not do.
+- GitHub Release assets: binaries + skills + the two library `*.tgz` + `SHA256SUMS`,
+  **no** `visualizer-webview-*.tar.gz`.
+- Dist `_consume-release.yml`: `publish-vsix` built the webview from the visualizer lib
+  and shipped all 5 VSIXes to Open VSX + Marketplace; `twf` (5 sub-pkgs + wrapper),
+  `claude-plugin`, PyPI (5 wheels), and Homebrew all green. The `publish-npm-wire-types`
+  / `publish-npm-visualizer` jobs are gone.
+- Trusted publishers for `visualizer` + `wire-types` are configured on npmjs.com as
+  `repo=temporal-architect, workflow=release.yml`; the unused `NPM_TOKEN` secret has been
+  removed from the dist repo.
+
+The previous fully-green OIDC run (pre-split) was `v0.9.3` (see § 0/0a, retained below).
 
 ---
 
