@@ -93,6 +93,12 @@ to *new* versions — it can't re-publish `0.9.1`.
   `v0.9.3` (cleanest), or a `v0.9.2` consume re-run (twf/claude-plugin report
   harmless "already published"; wire-types/visualizer/claude-plugin fill in).
 
+**`v0.9.3` — OIDC fully verified ✅** All 9 npm packages published token-free
+via trusted publishing; the 7 in-repo packages carry `publish` + `provenance`
+attestations, `wire-types`/`visualizer` have none (by design). All non-npm
+channels green too. **Remaining: delete the now-unused `NPM_TOKEN` secret from
+the dist repo** (`gh secret delete NPM_TOKEN -R jmbarzee/temporal-architect-dist`).
+
 The sections below are retained as the historical diagnosis from the `v0.9.0`
 run that uncovered the bugs + missing secrets.
 
