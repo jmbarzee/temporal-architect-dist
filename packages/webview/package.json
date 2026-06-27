@@ -1,0 +1,22 @@
+{
+  "name": "@temporal-architect/webview",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-only package: bundles @temporal-architect/visualizer into the IIFE webview asset embedded in the VS Code extension (packages/vscode/dist/webview). Never published — the webview is a packaging format, not a library.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@temporal-architect/visualizer": "file:../../dist-assets/temporal-architect-visualizer-0.0.0.tgz",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.5"
+  }
+}

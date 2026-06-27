@@ -1,10 +1,12 @@
 # Distribution repo Makefile.
 #
-# This repo does NO source build. It downloads the toolchain's GitHub Release
-# assets (binaries, skills tarball, visualizer lib/webview, wire-types), stamps
-# the incoming version into every manifest, repackages, and publishes to every
-# registry. The toolchain (jmbarzee/temporal-architect) is the engine + the
-# canonical Release; this is the storefront.
+# This repo builds every end-user consumption model from the toolchain's GitHub
+# Release assets (binaries, skills tarball, visualizer lib, wire-types). It
+# downloads those assets, stamps the incoming version into every manifest,
+# packages (CLI wrappers, VSIX + its webview bundle, claude-plugin, PyPI), and
+# publishes to every registry. The toolchain (jmbarzee/temporal-architect) is
+# the engine + the canonical Release and publishes its own libraries; this is
+# the storefront.
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -87,7 +89,7 @@ check-versions: require-version
 
 # ── Stage downloaded assets into package trees ───────────────────────────────
 
-.PHONY: stage-binary stage-skills stage-webview
+.PHONY: stage-binary stage-skills build-webview
 
 ## Extract the platform binary archive into the extension bin/ (for VSIX/npm/pypi).
 ## Usage: make stage-binary GOOS=darwin GOARCH=arm64
@@ -110,11 +112,16 @@ stage-skills: require-version
 	tar xzf $(ASSETS)/skills-v$(VER).tar.gz -C packages/npm/claude-plugin
 	@echo "Staged skills"
 
-## Extract the visualizer webview bundle into the extension.
-stage-webview: require-version
-	@mkdir -p $(EXT_DIR)/dist/webview
-	tar xzf $(ASSETS)/visualizer-webview-v$(VER).tar.gz -C $(EXT_DIR)/dist/webview
-	@echo "Staged webview bundle"
+## Build the visualizer webview IIFE bundle into the extension. The webview is a
+## packaging format, not a library: we wrap the published @temporal-architect/
+## visualizer library (consumed from the toolchain Release tarball, file:, so the
+## VSIX build never waits on an npm publish) in the host glue and bundle a single
+## IIFE the extension loads. Self-stamps the visualizer dep to the downloaded
+## tarball, then installs + builds.
+build-webview: require-version
+	@sed -i.bak 's|\("@temporal-architect/visualizer": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-visualizer-$(VER).tgz"|' packages/webview/package.json && rm -f packages/webview/package.json.bak
+	cd packages/webview && npm install --no-audit --no-fund && npm run build
+	@echo "Built webview bundle into $(EXT_DIR)/dist/webview"
 
 # ── Local dev intake (build sibling toolchain → dist-assets) ─────────────────
 
@@ -127,10 +134,15 @@ stage-webview: require-version
 ## into the dist intake folder. Version is the toolchain's `git describe`.
 fetch-local:
 	@mkdir -p $(ASSETS)
-	$(MAKE) -C $(TOOLCHAIN) build-twf-archive pack-visualizer-webview build-skills-archive \
+	$(MAKE) -C $(TOOLCHAIN) build-twf-archive pack-visualizer-lib pack-wire-types build-skills-archive \
 		VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
 	cp $(TOOLCHAIN)/dist/twf-v$(DEV_VER)-$(GOOS)-$(GOARCH).tar.gz $(ASSETS)/
-	cp $(TOOLCHAIN)/dist/visualizer-webview-v$(DEV_VER).tar.gz $(ASSETS)/
+	@# npm pack names tarballs by the package's manifest version, which need not
+	@# equal the local git-describe DEV_VER; rename on copy so build-webview's
+	@# file: path (…-$(DEV_VER).tgz) resolves. The tarball's internal version is
+	@# untouched (npm reads contents, not filename).
+	cp $(TOOLCHAIN)/dist/temporal-architect-visualizer-*.tgz $(ASSETS)/temporal-architect-visualizer-$(DEV_VER).tgz
+	cp $(TOOLCHAIN)/dist/temporal-architect-wire-types-*.tgz $(ASSETS)/temporal-architect-wire-types-$(DEV_VER).tgz
 	cp $(TOOLCHAIN)/dist/skills-v$(DEV_VER).tar.gz $(ASSETS)/
 	@echo "Copied local toolchain archives into $(ASSETS)/ (v$(DEV_VER))"
 
@@ -140,7 +152,7 @@ fetch-local:
 ## prep — the target behind the "Run Extension (Local Toolchain)" launch config.
 ## Assumes the extension's node_modules are installed (`cd $(EXT_DIR) && npm install`).
 dev: fetch-local
-	$(MAKE) stage-binary stage-webview stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
+	$(MAKE) stage-binary build-webview stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
 	cd $(EXT_DIR) && npm run compile
 	@echo "Extension ready — launch with F5 (Run Extension)"
 
@@ -227,20 +239,9 @@ build-claude-plugin: stage-skills
 publish-npm-claude-plugin: build-claude-plugin
 	cd packages/npm/claude-plugin && npm publish --provenance
 
-# ── Re-publish prebuilt toolchain tarballs (no build) ────────────────────────
-
-.PHONY: publish-visualizer publish-wire-types
-
-## Publish the visualizer lib tarball downloaded from the toolchain Release.
-## The leading "./" is load-bearing: without it npm reads "dist-assets/<file>.tgz"
-## as a GitHub "owner/repo" shorthand and tries to git-clone it.
-publish-visualizer: require-version
-	npm publish --access public ./$(ASSETS)/temporal-architect-visualizer-$(VER).tgz
-
-## Publish the wire-types tarball downloaded from the toolchain Release.
-## The leading "./" is load-bearing (see publish-visualizer).
-publish-wire-types: require-version
-	npm publish --access public ./$(ASSETS)/temporal-architect-wire-types-$(VER).tgz
+# The visualizer + wire-types libraries are published to npm by the TOOLCHAIN
+# repo (where their source and repository.url live, so provenance succeeds). This
+# repo only consumes their Release tarballs at build time (VSIX types + webview).
 
 # ── Homebrew tap ─────────────────────────────────────────────────────────────
 
@@ -257,6 +258,7 @@ publish-brew: require-version
 .PHONY: clean
 clean:
 	rm -rf $(ASSETS) $(EXT_DIR)/bin $(EXT_DIR)/dist $(EXT_DIR)/out $(EXT_DIR)/skills $(EXT_DIR)/*.vsix
+	rm -rf packages/webview/node_modules
 	rm -rf packages/npm/twf-*/bin packages/npm/twf*/LICENSE packages/npm/claude-plugin/skills
 	rm -rf packages/pypi/twf-cli/dist packages/pypi/twf-cli/src/twf_cli/_binary
 	@echo "Cleaned"

@@ -1,7 +1,8 @@
 name: _publish-vsix
 
 # Reusable: build per-platform VSIXes from the toolchain Release assets (binary +
-# webview bundle + skills), then publish to VS Code Marketplace + Open VSX.
+# skills + the visualizer library, from which the webview IIFE is built here),
+# then publish to VS Code Marketplace + Open VSX.
 #
 # The two registries publish in INDEPENDENT jobs: a failure on one (e.g. an
 # expired VS Code Marketplace PAT) must never block or skip the other. Open VSX
@@ -42,7 +43,7 @@ jobs:
           make fetch-release VERSION=${{ inputs.version }}
           make stamp-versions VERSION=${{ inputs.version }}
           make stage-skills VERSION=${{ inputs.version }}
-          make stage-webview VERSION=${{ inputs.version }}
+          make build-webview VERSION=${{ inputs.version }}
           make build-extension VERSION=${{ inputs.version }}
         env:
           GH_TOKEN: ${{ github.token }}

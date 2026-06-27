@@ -54,27 +54,14 @@ jobs:
 
   # npm channels authenticate via trusted publishing (OIDC) — no NPM_TOKEN.
   # npm validates the *calling* (top-level) workflow filename, so the trusted
-  # publisher for every @temporal-architect/* package is configured on npmjs.com
-  # as repo=temporal-architect-dist, workflow=_consume-release.yml. id-token:write
-  # must be granted on BOTH this caller job and the reusable workflow it calls.
-  publish-npm-wire-types:
-    needs: [resolve-version, check-versions]
-    permissions:
-      id-token: write
-      contents: read
-    uses: ./.github/workflows/_publish-npm-wire-types.yml
-    with:
-      version: ${{ needs.resolve-version.outputs.version }}
-
-  publish-npm-visualizer:
-    needs: [resolve-version, check-versions]
-    permissions:
-      id-token: write
-      contents: read
-    uses: ./.github/workflows/_publish-npm-visualizer.yml
-    with:
-      version: ${{ needs.resolve-version.outputs.version }}
-
+  # publisher for every @temporal-architect/* package published HERE is
+  # configured on npmjs.com as repo=temporal-architect-dist,
+  # workflow=_consume-release.yml. id-token:write must be granted on BOTH this
+  # caller job and the reusable workflow it calls.
+  #
+  # The visualizer + wire-types LIBRARIES are not published here — the toolchain
+  # publishes them (repository.url = toolchain, so provenance succeeds). This
+  # repo only consumes their Release tarballs at build time.
   publish-npm-twf:
     needs: [resolve-version, check-versions]
     permissions:

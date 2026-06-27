@@ -7,8 +7,15 @@ pre-split, stale) status claims in [`publishing_setup.md`](./publishing_setup.md
 — keep that file for the PyPI/Homebrew account-creation *recipes*, which are still
 accurate. Design rationale lives in [`packaging.md`](./packaging.md).
 
-Last updated: 2026-06-18 — **`v0.9.1` was the first fully-green end-to-end run:
-every channel published.** See § 0.
+Last updated: 2026-06-26 — **library-vs-distribution split.** The two npm
+*libraries* (`visualizer`, `wire-types`) now publish from the **toolchain** repo,
+where their `repository.url` matches, so provenance succeeds and the
+`NPM_CONFIG_PROVENANCE=false` workaround is retired. The VS Code **webview** is now
+built in this repo (`packages/webview`) from the visualizer library, so the toolchain
+no longer emits `visualizer-webview-*.tar.gz`. The previous fully-green OIDC run was
+`v0.9.3` (see § 0/0a, retained below). The trusted-publisher config for `visualizer` +
+`wire-types` must be repointed to `repo=temporal-architect, workflow=release.yml` before
+the next tag (see § 0a).
 
 ---
 
@@ -109,33 +116,34 @@ run that uncovered the bugs + missing secrets.
 Two repos, one release train:
 
 ```
-jmbarzee/temporal-architect          (toolchain — engine + canonical Release)
+jmbarzee/temporal-architect          (toolchain — engine, libraries, canonical Release)
   └─ tag v* → release.yml
        ├─ check-versions
        ├─ build-binaries (5 platforms) ─┐
        ├─ build-skills-tarball          ├─→ publish-github-release  (the canonical
        ├─ build-artifacts (vis + wire)  ┘     Release: all assets + SHA256SUMS)
+       ├─ publish-npm-libs ──────────────────► npm: visualizer + wire-types (OIDC + provenance)
        └─ dispatch-dist ──────────────────────► repository_dispatch (toolchain-release)
                                                         │  needs DIST_DISPATCH_TOKEN
                                                         ▼
-jmbarzee/temporal-architect-dist     (storefront — downloads assets, republishes)
+jmbarzee/temporal-architect-dist     (storefront — downloads assets, packages consumption models)
   └─ Consume Release (_consume-release.yml)
        ├─ resolve-version
        ├─ check-versions (stamp + verify)
-       ├─ publish-npm-wire-types
-       ├─ publish-npm-visualizer
        ├─ publish-npm-twf (5 sub-pkgs → wrapper)
        ├─ publish-npm-claude-plugin
        ├─ publish-pypi (5 wheels → upload)
-       ├─ publish-vsix (build matrix → Open VSX + VS Code Marketplace)
+       ├─ publish-vsix (build matrix; builds webview from visualizer lib → Open VSX + VS Code Marketplace)
        └─ publish-brew
 ```
 
-- The toolchain is a **pure release-cutter**: it builds primitive artifacts and
-  publishes the GitHub Release, then hands off. It holds **no** registry tokens.
-- The dist repo holds **all** registry tokens and does **no** source build — it
-  downloads the Release assets (`make fetch-release`), stamps the dispatched
-  version into every manifest (`make stamp-versions`), repackages, and publishes.
+- The toolchain builds primitive artifacts, **publishes its own two npm libraries**
+  (visualizer + wire-types, via OIDC — no token), publishes the GitHub Release, then
+  hands off. It holds only `GITHUB_TOKEN` + `DIST_DISPATCH_TOKEN`.
+- The dist repo holds the **consumption-model** registry tokens and does no *source*
+  build (it does build the webview bundle from the visualizer library) — it downloads
+  the Release assets (`make fetch-release`), stamps the dispatched version into every
+  manifest (`make stamp-versions`), packages, and publishes.
 - Dist never tags independently; the version is whatever the dispatch payload
   carries.
 
@@ -147,10 +155,12 @@ Verified byte-for-byte locally against the dist `Makefile`:
 |---|---|
 | `twf-v<V>-{darwin,linux}-{amd64,arm64}.tar.gz`, `twf-v<V>-windows-amd64.zip` | npm-twf sub-pkgs, pypi wheels, VSIX binary |
 | `skills-v<V>.tar.gz` | claude-plugin, VSIX |
-| `visualizer-webview-v<V>.tar.gz` | VSIX webview |
-| `temporal-architect-visualizer-<V>.tgz` | npm visualizer (republished) |
-| `temporal-architect-wire-types-<V>.tgz` | npm wire-types (republished) **+ VSIX build (types)** |
+| `temporal-architect-visualizer-<V>.tgz` | VSIX webview build (`file:`, via `packages/webview`). *(npm publish of this package happens in the toolchain, not here.)* |
+| `temporal-architect-wire-types-<V>.tgz` | VSIX build types (`file:`). *(npm publish happens in the toolchain.)* |
 | `SHA256SUMS` | integrity |
+
+> The `visualizer-webview-v<V>.tar.gz` asset is gone: the webview IIFE bundle is now
+> built in this repo (`packages/webview`) from the visualizer library tarball.
 
 ### Dependency graph (what blocks what)
 
