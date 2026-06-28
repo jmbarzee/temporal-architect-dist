@@ -82,6 +82,12 @@
         "title": "Install Skills",
         "category": "Temporal Architect",
         "icon": "$(lightbulb)"
+      },
+      {
+        "command": "twf.registerMcpServer",
+        "title": "Register MCP Server",
+        "category": "Temporal Architect",
+        "icon": "$(plug)"
       }
     ],
     "menus": {
@@ -121,6 +127,9 @@
         },
         {
           "command": "twf.installSkills"
+        },
+        {
+          "command": "twf.registerMcpServer"
         }
       ]
     },
@@ -158,6 +167,11 @@
           "default": 60,
           "minimum": 0,
           "description": "Complexity ceiling for the chunk-decomposition overlay in the Graph view. Chunks above it are offered division suggestions; 0 disables the overlay. Reload the visualizer after changing."
+        },
+        "twf.mcp.autoRegister": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically register the bundled `twf mcp` server in ~/.cursor/mcp.json on activation so the agent can call the TWF parser tools. A `twf` server you configured yourself is never overwritten. Disable to manage MCP config manually (use the 'Temporal Architect: Register MCP Server' command to register on demand)."
         }
       }
     }

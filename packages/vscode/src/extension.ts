@@ -28,8 +28,17 @@ export function activate(context: vscode.ExtensionContext) {
   setupTerminalPath(context);
 
   // Symlink bundled `twf` into ~/.local/bin so AI agent shells (which don't
-  // inherit the integrated terminal's PATH) can resolve it without `go install`
-  linkTwfOnPath(context);
+  // inherit the integrated terminal's PATH) can resolve it without `go install`,
+  // then auto-register the `twf mcp` server in ~/.cursor/mcp.json (which prefers
+  // that stable link path). Chained so the link exists before we point at it.
+  linkTwfOnPath(context).then(async () => {
+    const result = await registerMcpServer(context);
+    if (result === "created") {
+      vscode.window.showInformationMessage(
+        "Temporal Architect: registered the twf MCP server in ~/.cursor/mcp.json. Reload the window to connect it."
+      );
+    }
+  });
 
   // Install bundled skills to ~/.cursor/skills/
   installSkills(context);
@@ -63,6 +72,45 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
   context.subscriptions.push(installSkillsCommand);
+
+  // Register MCP-server registration command (manual re-run; bypasses the
+  // twf.mcp.autoRegister setting since it is an explicit user action).
+  const registerMcpCommand = vscode.commands.registerCommand(
+    "twf.registerMcpServer",
+    async () => {
+      try {
+        const result = await registerMcpServer(context, { force: true });
+        const mcpPath = path.join(os.homedir(), ".cursor", "mcp.json");
+        switch (result) {
+          case "created":
+          case "updated":
+            vscode.window.showInformationMessage(
+              `Temporal Architect: registered the twf MCP server in ${mcpPath}. Reload the window to connect it.`
+            );
+            break;
+          case "unchanged":
+            vscode.window.showInformationMessage(
+              `Temporal Architect: the twf MCP server is already registered in ${mcpPath}.`
+            );
+            break;
+          case "user-owned":
+            vscode.window.showWarningMessage(
+              `A \`twf\` MCP server you configured already exists in ${mcpPath}; leaving it untouched.`
+            );
+            break;
+          case "unparseable":
+            vscode.window.showErrorMessage(
+              `Could not parse ${mcpPath}; left it untouched.`
+            );
+            break;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to register MCP server: ${msg}`);
+      }
+    }
+  );
+  context.subscriptions.push(registerMcpCommand);
 
   // Register visualize file command
   const visualizeCommand = vscode.commands.registerCommand(
@@ -237,6 +285,122 @@ async function linkTwfOnPath(context: vscode.ExtensionContext) {
     await context.globalState.update(TWF_PATH_LINK_KEY, target);
   } catch (err) {
     console.warn("Failed to link twf onto PATH:", err);
+  }
+}
+
+// Name under which the bundled server is registered in ~/.cursor/mcp.json, and
+// the globalState marker recording that this extension created that entry. As
+// with TWF_PATH_LINK_KEY, the marker lets us refresh our own entry while never
+// clobbering a `twf` server the user configured themselves.
+const MCP_SERVER_NAME = "twf";
+const TWF_MCP_OWNED_KEY = "twf.mcpServerOwned";
+
+type McpRegisterResult =
+  | "created"
+  | "updated"
+  | "unchanged"
+  | "disabled"
+  | "user-owned"
+  | "unparseable"
+  | "error";
+
+/**
+ * Auto-register the bundled `twf mcp` server in Cursor's ~/.cursor/mcp.json so
+ * the agent can call the parser tools without the user hand-editing MCP config.
+ *
+ * Mirrors linkTwfOnPath's ownership model: we only create or refresh an entry we
+ * own (recorded in globalState); a `twf` server the user added themselves is
+ * left untouched. The write merges into the existing file (preserving other
+ * servers and top-level keys) and is idempotent — it rewrites only when the
+ * registered command path changes (e.g. across upgrades).
+ *
+ * This targets Cursor's ~/.cursor/mcp.json (the same ~/.cursor convention the
+ * skills install uses). VS Code's native MCP provider API is a separate, larger
+ * integration tracked in the dist BACKLOG.
+ *
+ * opts.force bypasses the twf.mcp.autoRegister setting for the explicit
+ * "Register MCP Server" command.
+ */
+async function registerMcpServer(
+  context: vscode.ExtensionContext,
+  opts?: { force?: boolean }
+): Promise<McpRegisterResult> {
+  const autoRegister = vscode.workspace
+    .getConfiguration("twf.mcp")
+    .get<boolean>("autoRegister", true);
+  if (!autoRegister && !opts?.force) {
+    return "disabled";
+  }
+
+  // Prefer the stable ~/.local/bin/twf link this extension manages (refreshed to
+  // the current bundled binary on every activation) so the registered path
+  // survives upgrades without rewriting mcp.json; fall back to the resolved
+  // (config > bundled > PATH) command.
+  const ext = process.platform === "win32" ? ".exe" : "";
+  const linkTarget = path.join(os.homedir(), ".local", "bin", `twf${ext}`);
+  const command =
+    context.globalState.get<string>(TWF_PATH_LINK_KEY) === linkTarget &&
+    fs.existsSync(linkTarget)
+      ? linkTarget
+      : resolveTwfBinary(context);
+
+  const mcpPath = path.join(os.homedir(), ".cursor", "mcp.json");
+
+  try {
+    let config: Record<string, any> = {};
+    if (fs.existsSync(mcpPath)) {
+      const raw = fs.readFileSync(mcpPath, "utf8").trim();
+      if (raw) {
+        try {
+          config = JSON.parse(raw);
+        } catch (err) {
+          // Never clobber a file we cannot parse (hand-edited, comments, etc.).
+          console.warn(
+            `twf: could not parse ${mcpPath}; skipping MCP auto-registration`,
+            err
+          );
+          return "unparseable";
+        }
+      }
+    }
+    if (typeof config !== "object" || config === null) {
+      config = {};
+    }
+    if (typeof config.mcpServers !== "object" || config.mcpServers === null) {
+      config.mcpServers = {};
+    }
+
+    const existing = config.mcpServers[MCP_SERVER_NAME];
+    const owned = context.globalState.get<boolean>(TWF_MCP_OWNED_KEY) === true;
+
+    // Leave a `twf` server the user configured themselves untouched.
+    if (existing && !owned) {
+      return "user-owned";
+    }
+
+    const desired = { command, args: ["mcp"] };
+    const unchanged =
+      existing &&
+      existing.command === desired.command &&
+      Array.isArray(existing.args) &&
+      existing.args.length === 1 &&
+      existing.args[0] === "mcp";
+
+    if (unchanged) {
+      await context.globalState.update(TWF_MCP_OWNED_KEY, true);
+      return "unchanged";
+    }
+
+    const firstTime = !existing;
+    config.mcpServers[MCP_SERVER_NAME] = desired;
+    fs.mkdirSync(path.dirname(mcpPath), { recursive: true });
+    fs.writeFileSync(mcpPath, JSON.stringify(config, null, 2) + "\n");
+    await context.globalState.update(TWF_MCP_OWNED_KEY, true);
+
+    return firstTime ? "created" : "updated";
+  } catch (err) {
+    console.warn("Failed to register twf MCP server:", err);
+    return "error";
   }
 }
 
