@@ -40,10 +40,12 @@ Once installed:
 }
 ```
 
-Works in any MCP-compatible client (Claude Desktop, Cursor MCP,
-Continue, Windsurf, Zed). See the
-[main project README](https://github.com/jmbarzee/temporal-architect) for
-the full MCP feature surface.
+Works in any MCP-compatible client (Claude Desktop, Cursor MCP, Continue,
+Windsurf, Zed). The server exposes the parser as MCP tools (`twf_check`,
+`twf_parse`, `twf_symbols`, `twf_graph`, `twf_graph_chunks`, `twf_spec_list`,
+`twf_spec_get`) and the embedded language spec as resources (`twf://spec`,
+`twf://spec/<slug>`). See the
+[main project README](https://github.com/jmbarzee/temporal-architect) for more.
 
 ## Subprocess use from Python
 
@@ -62,8 +64,8 @@ ast = json.loads(result.stdout)
 
 ## Versioning
 
-Versions are synced to the upstream `temporal-architect` Git tag, so `0.3.x`
-of this package corresponds to `v0.3.x` of the toolchain.
+Versions are synced to the upstream `temporal-architect` Git tag, so `0.8.x`
+of this package corresponds to `v0.8.x` of the toolchain.
 
 ## License
 

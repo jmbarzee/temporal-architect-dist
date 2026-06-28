@@ -18,7 +18,7 @@ Bundles:
 - **Skills** — `temporal-architect-design`, `temporal-architect-author-go`, and
   `temporal-architect-author-infra`, available to Claude as auto-discoverable agent skills.
 - **MCP server** — the `twf` MCP server (via `npx -y @temporal-architect/twf mcp`),
-  exposing TWF parser tools, embedded spec resources, and skill prompts.
+  exposing TWF parser tools and embedded spec resources.
 
 The plugin definition itself lives in
 [`.claude-plugin/marketplace.json`](https://github.com/jmbarzee/temporal-architect/blob/main/.claude-plugin/marketplace.json)

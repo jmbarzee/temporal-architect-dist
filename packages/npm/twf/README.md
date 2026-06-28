@@ -38,8 +38,9 @@ In your MCP client config (Claude Desktop, Cursor MCP, Continue, Windsurf, Zed):
 }
 ```
 
-The `mcp` subcommand exposes `twf check`, `parse`, `symbols`, `spec`, and
-embedded skills as MCP tools/resources/prompts.
+The `mcp` subcommand exposes the parser as MCP tools (`twf_check`, `twf_parse`,
+`twf_symbols`, `twf_graph`, `twf_graph_chunks`, `twf_spec_list`, `twf_spec_get`)
+and the embedded language spec as resources (`twf://spec`, `twf://spec/<slug>`).
 
 ## Supported platforms
 
@@ -65,8 +66,8 @@ an issue at [github.com/jmbarzee/temporal-architect/issues](https://github.com/j
 
 ## Versioning
 
-Versions are synced to the upstream `temporal-architect` Git tag, so `0.3.x`
-of this package corresponds to `v0.3.x` of the toolchain.
+Versions are synced to the upstream `temporal-architect` Git tag, so `0.8.x`
+of this package corresponds to `v0.8.x` of the toolchain.
 
 ## License
 

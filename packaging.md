@@ -57,7 +57,7 @@ Distribution surfaces, where their source lives (T = this toolchain repo, D = di
 | Claude Code plugin | `packages/npm/claude-plugin/` (D); catalog at `.claude-plugin/marketplace.json` (D root) | `/plugin marketplace add jmbarzee/temporal-architect-dist` | Claude Code users |
 | Skills tarball | `skills/` (T) via `internal/release/gen-skills-manifest/` | `skills-vX.Y.Z.tar.gz` GitHub Release asset | Prompt-library builders, non-binary consumers |
 
-All channels converge on the same `twf` binary and the same embedded skills + spec.
+Every binary channel ships the same `twf` (with the same embedded spec); the skill-bearing channels (VSIX, Claude plugin, skills tarball) all carry the same `skills/` tree.
 
 ### Release pipeline (two repos, one event)
 
