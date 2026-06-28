@@ -152,6 +152,12 @@
           "type": "string",
           "default": "",
           "description": "Path to the twf parser binary for visualization. If empty, looks for 'parse' on PATH."
+        },
+        "twf.decompose.ceiling": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Complexity ceiling for the chunk-decomposition overlay in the Graph view. Chunks above it are offered division suggestions; 0 disables the overlay. Reload the visualizer after changing."
         }
       }
     }

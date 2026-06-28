@@ -7,6 +7,7 @@ import {
   mountNodeTypeStyles,
   type TWFFile,
   type ParserGraph,
+  type Decomposition,
 } from '@temporal-architect/visualizer'
 import '@temporal-architect/visualizer/styles.css'
 
@@ -43,6 +44,7 @@ const vscode = acquireVsCodeApi()
 function WebviewApp() {
   const [ast, setAst] = React.useState<TWFFile | null>(null)
   const [parserGraph, setParserGraph] = React.useState<ParserGraph | undefined>(undefined)
+  const [decomposition, setDecomposition] = React.useState<Decomposition | undefined>(undefined)
   const [error, setError] = React.useState<string | null>(null)
   const [showStyleGuide, setShowStyleGuide] = React.useState(false)
   // Hash of the most recently committed AST. The extension re-posts the AST on
@@ -77,6 +79,7 @@ function WebviewApp() {
         if (norm) {
           setAst(norm.ast)
           setParserGraph(norm.parserGraph)
+          setDecomposition(norm.decomposition)
           setError(null)
         } else {
           setError('Unrecognized payload shape')
@@ -86,6 +89,7 @@ function WebviewApp() {
         setError(message.message)
         setAst(null)
         setParserGraph(undefined)
+        setDecomposition(undefined)
       }
     }
 
@@ -132,6 +136,7 @@ function WebviewApp() {
     <Visualizer
       ast={ast}
       parserGraph={parserGraph}
+      decomposition={decomposition}
       onOpenFile={openFile}
       onRefocus={requestRefocus}
       style={{ height: '100%' }}

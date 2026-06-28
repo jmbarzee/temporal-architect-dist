@@ -600,7 +600,12 @@ class WorkflowVisualizerPanel {
       // view doesn't need it. If we can't get a parser graph, post the AST
       // anyway and let the graph view render empty.
       const parserGraph = await this._extractGraph();
-      this._panel.webview.postMessage({ type: "ast", data: { ast, parserGraph } });
+      // The decomposition (`twf graph chunks`) drives the Graph view's group
+      // overlay. Also best-effort and equally optional: when absent the overlay
+      // is simply inert. No recompute yet — the analysis runs at the configured
+      // default ceiling on every refresh.
+      const decomposition = await this._extractChunks();
+      this._panel.webview.postMessage({ type: "ast", data: { ast, parserGraph, decomposition } });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this._panel.webview.postMessage({ type: "error", message: errorMessage });
@@ -648,6 +653,61 @@ class WorkflowVisualizerPanel {
       // Per-file parse errors come through as diagnostics (still
       // produces a graph); only catastrophic failures land here.
       console.warn("Failed to extract deployment graph:", err);
+      return undefined;
+    }
+  }
+
+  /**
+   * Run `twf graph chunks --json` once over the full file set — the
+   * topology-based decomposition that powers the Graph view's group overlay.
+   * Same single-resolution-context, multi-file shape as `_extractGraph`.
+   *
+   * The decomposition only emits division suggestions for chunks above a
+   * complexity ceiling, so we pass `--ceiling` from the `twf.decompose.ceiling`
+   * setting (default 60; 0 disables the overlay). The resolved analysis
+   * parameters (ceiling / floor / max-depth / strategies) ride back inside the
+   * payload, so the webview's read-only Params tab needs nothing more here.
+   *
+   * Returns the `chunks` payload from the envelope, or `undefined` when the
+   * call failed or chunks weren't produced. Best-effort: failures are logged,
+   * never thrown — the group overlay degrades to "absent" rather than blocking
+   * the rest of the visualizer.
+   */
+  private async _extractChunks(): Promise<unknown | undefined> {
+    if (this._files.length === 0) return undefined;
+
+    const config = vscode.workspace.getConfiguration("twf.parser");
+    const configPath = config.get<string>("path", "");
+
+    let resolvedCommand: string;
+    if (configPath) {
+      resolvedCommand = configPath;
+    } else {
+      const ext = process.platform === "win32" ? ".exe" : "";
+      const bundled = path.join(this._extensionUri.fsPath, "bin", `twf${ext}`);
+      resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
+    }
+
+    const ceiling = vscode.workspace
+      .getConfiguration("twf.decompose")
+      .get<number>("ceiling", 60);
+
+    try {
+      const { stdout, stderr } = await execFileAsync(resolvedCommand, [
+        "graph",
+        "chunks",
+        "--json",
+        "--ceiling",
+        String(ceiling),
+        ...this._files,
+      ]);
+      if (stderr) {
+        console.warn("twf graph chunks stderr:", stderr);
+      }
+      const envelope = JSON.parse(stdout) as { chunks?: unknown };
+      return envelope.chunks;
+    } catch (err) {
+      console.warn("Failed to extract decomposition:", err);
       return undefined;
     }
   }
