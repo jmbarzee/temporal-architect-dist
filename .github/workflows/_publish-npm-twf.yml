@@ -71,4 +71,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Publish wrapper
-        run: make publish-npm
+        run: make publish-npm VERSION=${{ inputs.version }}
