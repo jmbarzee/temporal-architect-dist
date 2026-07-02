@@ -64,7 +64,11 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Ensure npm supports OIDC (>= 11.5.1)
         run: npm install -g npm@latest
-      - name: Stamp
-        run: make stamp-versions VERSION=${{ inputs.version }}
+      - name: Fetch + stamp
+        run: |
+          make fetch-release VERSION=${{ inputs.version }}
+          make stamp-versions VERSION=${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish wrapper
         run: make publish-npm

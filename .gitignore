@@ -14,6 +14,13 @@ packages/vscode/skills/
 # Claude Code plugin payload — staged from the downloaded skills tarball
 packages/npm/claude-plugin/skills/
 
+# Composed package READMEs — generated build output (render-docs). Canonical
+# source is the toolchain doc fragments + docs/templates/ here. Never hand-edit.
+packages/vscode/README.md
+packages/npm/twf/README.md
+packages/pypi/twf-cli/README.md
+packages/npm/claude-plugin/README.md
+
 # npm platform sub-package binaries (staged at publish time)
 packages/npm/twf-*/bin/twf
 packages/npm/twf-*/bin/twf.exe

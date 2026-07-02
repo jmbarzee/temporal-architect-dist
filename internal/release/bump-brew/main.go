@@ -57,7 +57,7 @@ var Platforms = []Platform{
 // formulaTemplate renders Formula/twf.rb. The template uses Go's text/template
 // syntax. SHA values come from per-platform archive downloads.
 const formulaTemplate = `class Twf < Formula
-  desc "Toolchain for designing and validating entire Temporal systems in .twf"
+  desc "{{.Desc}}"
   homepage "https://github.com/{{.SourceRepo}}"
   version "{{.Version}}"
   license "MIT"
@@ -94,15 +94,25 @@ const formulaTemplate = `class Twf < Formula
 end
 `
 
+// DefaultDesc is the Homebrew `desc` used when -desc is not supplied. The
+// canonical, composable source is docs/descriptions.json (key "homebrew") in
+// this repo; publish-brew passes it via -desc so the formula one-liner stays in
+// sync with every other channel's description. This constant is the fallback.
+const DefaultDesc = "Toolchain for designing and validating entire Temporal systems in .twf"
+
 // FormulaData feeds the template.
 type FormulaData struct {
 	Version    string            // semver without leading "v"
 	SourceRepo string            // e.g. "jmbarzee/temporal-architect"
+	Desc       string            // Homebrew one-liner (from docs/descriptions.json)
 	SHAs       map[string]string // platform key (e.g. "darwin-arm64") → sha256 hex
 }
 
 // renderFormula produces the Ruby formula text. Pure function; no IO.
 func renderFormula(data FormulaData) (string, error) {
+	if strings.TrimSpace(data.Desc) == "" {
+		data.Desc = DefaultDesc
+	}
 	for _, p := range Platforms {
 		if _, ok := data.SHAs[p.String()]; !ok {
 			return "", fmt.Errorf("renderFormula: missing SHA for %s", p)
@@ -247,6 +257,7 @@ func main() {
 		source      string
 		token       string
 		out         string
+		desc        string
 		dryRun      bool
 	)
 	flag.StringVar(&versionFlag, "version", "", "Release version, e.g. 'v0.3.2' (with or without leading v).")
@@ -254,6 +265,7 @@ func main() {
 	flag.StringVar(&source, "source", "jmbarzee/temporal-architect", "Source repo whose GitHub Release we're pinning to.")
 	flag.StringVar(&token, "token", os.Getenv("GITHUB_TOKEN"), "GitHub token with write access to the tap repo (defaults to $GITHUB_TOKEN).")
 	flag.StringVar(&out, "out", "", "If set, write formula to this file instead of pushing to the tap.")
+	flag.StringVar(&desc, "desc", DefaultDesc, "Homebrew formula `desc` one-liner (sourced from docs/descriptions.json by publish-brew).")
 	flag.BoolVar(&dryRun, "dry-run", false, "Print formula to stdout instead of pushing.")
 	flag.Parse()
 
@@ -261,6 +273,9 @@ func main() {
 		exit("required: -version")
 	}
 	version := strings.TrimPrefix(versionFlag, "v")
+	if strings.TrimSpace(desc) == "" {
+		desc = DefaultDesc
+	}
 
 	httpc := &http.Client{Timeout: 5 * time.Minute}
 
@@ -272,6 +287,7 @@ func main() {
 	formula, err := renderFormula(FormulaData{
 		Version:    version,
 		SourceRepo: source,
+		Desc:       desc,
 		SHAs:       shas,
 	})
 	if err != nil {

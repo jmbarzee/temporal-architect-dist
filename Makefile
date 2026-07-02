@@ -73,6 +73,10 @@ stamp-versions: require-version
 	@sed -i.bak 's/^__version__ = "[^"]*"$$/__version__ = "$(VER)"/' packages/pypi/twf-cli/src/twf_cli/__init__.py && rm -f packages/pypi/twf-cli/src/twf_cli/__init__.py.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/npm/claude-plugin/package.json && rm -f packages/npm/claude-plugin/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/g' .claude-plugin/marketplace.json && rm -f .claude-plugin/marketplace.json.bak
+	@# Descriptions are composable too: stamp each channel's `description` from the
+	@# single source (docs/descriptions.json; "@global" inherits the toolchain
+	@# fragment). Homebrew's desc is passed to bump-brew by publish-brew instead.
+	@node docs/stamp-descriptions.mjs --assets $(ASSETS)
 	@echo "Stamped manifests to $(VER)"
 
 ## Assert every dist manifest's version equals <VER>. Run after stamp-versions
@@ -89,7 +93,7 @@ check-versions: require-version
 
 # ── Stage downloaded assets into package trees ───────────────────────────────
 
-.PHONY: stage-binary stage-skills build-webview
+.PHONY: stage-binary stage-skills build-webview stage-docs render-docs
 
 ## Extract the platform binary archive into the extension bin/ (for VSIX/npm/pypi).
 ## Usage: make stage-binary GOOS=darwin GOARCH=arm64
@@ -133,6 +137,35 @@ build-webview: require-version
 	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C packages/webview/node_modules/@temporal-architect/visualizer --strip-components=1
 	cd packages/webview && npm run build
 	@echo "Built webview bundle into $(EXT_DIR)/dist/webview"
+
+# ── Composable docs (single source of truth) ────────────────────────────────
+# Each channel's README is composed from the toolchain's canonical doc fragments
+# + a per-target header template (docs/templates/). Fragments ship *inside* the
+# artifacts they cover; stage-docs extracts them from the downloaded Release
+# assets, render-docs assembles the listings. Generated READMEs are gitignored —
+# never hand-edit them. See AGENTS.md and documentation_propagation.md.
+
+## Extract the doc fragments (bundled inside their artifacts) + skills into
+## $(ASSETS)/docs/ so render-docs can compose the listings.
+stage-docs: require-version
+	@rm -rf $(ASSETS)/docs && mkdir -p $(ASSETS)/docs/skills
+	@# global/parser/mcp cover the binary — identical across platform archives;
+	@# pull them from whichever twf-v* tarball was downloaded.
+	@arch=$$(ls $(ASSETS)/twf-v$(VER)-*.tar.gz 2>/dev/null | head -1); \
+	if [ -z "$$arch" ]; then echo "Error: no twf-v$(VER)-*.tar.gz in $(ASSETS)/ (run fetch-release)"; exit 1; fi; \
+	tar xzf "$$arch" -C $(ASSETS)/docs --strip-components=1 docs/global.md docs/parser.md docs/mcp.md
+	@# visualizer fragment — inside the published tgz (npm 'package/' prefix).
+	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C $(ASSETS)/docs --strip-components=1 package/FRAGMENT.md
+	@mv $(ASSETS)/docs/FRAGMENT.md $(ASSETS)/docs/visualizer.md
+	@# skills — frontmatter blurbs from the skills tarball (top-level skills/ prefix).
+	tar xzf $(ASSETS)/skills-v$(VER).tar.gz -C $(ASSETS)/docs/skills --strip-components=1
+	@echo "Staged doc fragments + skills into $(ASSETS)/docs/"
+
+## Compose every channel's README from the staged fragments + templates.
+## Generated READMEs are gitignored build output.
+render-docs: require-version stage-docs
+	node docs/render.mjs --version $(VER) --assets $(ASSETS)
+	@echo "Rendered package READMEs"
 
 # ── Local dev intake (build sibling toolchain → dist-assets) ─────────────────
 
@@ -180,7 +213,7 @@ build-extension: require-version
 
 ## Package a single-platform VSIX. Stages the binary first.
 ## Usage: make package-platform VSCE_TARGET=darwin-arm64 GOOS=darwin GOARCH=arm64
-package-platform: require-version stage-binary
+package-platform: require-version stage-binary render-docs
 	cd $(EXT_DIR) && npx @vscode/vsce package --target $(VSCE_TARGET)
 	@echo "Packaged VSIX for $(VSCE_TARGET)"
 
@@ -216,7 +249,8 @@ publish-npm-platform: require-version stage-binary
 ## --provenance: published via trusted publishing (OIDC) in CI; the in-repo
 ## package's repository.url matches this repo. (Local runs without CI OIDC will
 ## fail provenance — these targets are CI publish targets.)
-publish-npm:
+## render-docs regenerates the (gitignored) README that npm ships.
+publish-npm: render-docs
 	cd packages/npm/twf && npm publish --provenance
 
 # ── PyPI wheel ───────────────────────────────────────────────────────────────
@@ -225,7 +259,7 @@ publish-npm:
 
 ## Stage the downloaded binary into the PyPI package and build one platform wheel.
 ## Usage: make build-pypi-wheel PLATFORM_TAG=macosx_11_0_arm64 GOOS=darwin GOARCH=arm64
-build-pypi-wheel: require-version stage-binary
+build-pypi-wheel: require-version stage-binary render-docs
 	@if [ -z "$(PLATFORM_TAG)" ]; then echo "Error: PLATFORM_TAG not set"; exit 1; fi
 	@mkdir -p packages/pypi/twf-cli/src/twf_cli/_binary
 	@ext=""; if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
@@ -244,8 +278,9 @@ publish-pypi:
 
 .PHONY: build-claude-plugin publish-npm-claude-plugin
 
-## Stage skills into the claude-plugin package (from the downloaded skills tarball).
-build-claude-plugin: stage-skills
+## Stage skills into the claude-plugin package (from the downloaded skills tarball)
+## and compose its README from the doc fragments.
+build-claude-plugin: stage-skills render-docs
 
 ## Publish @temporal-architect/claude-plugin to npm.
 ## (The reusable workflow publishes inline with --provenance; kept in sync here.)
@@ -264,7 +299,8 @@ publish-npm-claude-plugin: build-claude-plugin
 ## Required env: HOMEBREW_TAP_TOKEN.
 publish-brew: require-version
 	@if [ -z "$(HOMEBREW_TAP_TOKEN)" ]; then echo "Error: HOMEBREW_TAP_TOKEN not set"; exit 1; fi
-	cd internal/release/bump-brew && go run . -version v$(VER) -source $(SRC_REPO) -token $(HOMEBREW_TAP_TOKEN)
+	@desc=$$(node -p "require('./docs/descriptions.json').homebrew"); \
+	cd internal/release/bump-brew && go run . -version v$(VER) -source $(SRC_REPO) -token $(HOMEBREW_TAP_TOKEN) -desc "$$desc"
 
 # ── Clean ────────────────────────────────────────────────────────────────────
 
@@ -274,4 +310,6 @@ clean:
 	rm -rf packages/webview/node_modules
 	rm -rf packages/npm/twf-*/bin packages/npm/twf*/LICENSE packages/npm/claude-plugin/skills
 	rm -rf packages/pypi/twf-cli/dist packages/pypi/twf-cli/src/twf_cli/_binary
+	@# Generated (gitignored) package READMEs composed by render-docs.
+	rm -f packages/vscode/README.md packages/npm/twf/README.md packages/pypi/twf-cli/README.md packages/npm/claude-plugin/README.md
 	@echo "Cleaned"

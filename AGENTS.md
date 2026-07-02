@@ -37,10 +37,24 @@ publishing/doc gaps are maintained in **`documentation_propagation.md`**. When
 adding a publishing channel or changing any listing copy, update that matrix and
 keep channels in sync per their row — do not introduce a new hand-written pitch.
 
-> Status: the compose pipeline is being built. Until it lands, the package
-> READMEs under `packages/**` are still hand-written; when editing them, change
-> copy at the component level conceptually and mirror it across channels per the
-> matrix, so the eventual extraction into fragments is mechanical.
+### How it works (the pipeline is live)
+
+- Canonical fragments live in the toolchain (`docs/fragments/*.md`) and ship
+  inside the artifacts they cover; `make stage-docs` extracts them from the
+  downloaded Release assets into `dist-assets/docs/`.
+- Per-target **header templates** live here in `docs/templates/*.md` and embed
+  `{{fragment:global|parser|mcp|visualizer}}` and `{{skills}}` tokens. These
+  headers are the channel-specific copy you *do* edit here.
+- `make render-docs` (`docs/render.mjs`) composes each listing and rewrites image
+  refs to release-pinned URLs. It runs automatically before `package-platform`,
+  `build-pypi-wheel`, `build-claude-plugin`, and `publish-npm`.
+- The composed `packages/**/README.md` are **generated build output, gitignored**
+  — never hand-edit them. To change shared copy, edit the toolchain fragment; to
+  change channel-specific copy, edit `docs/templates/<target>.md`.
+- Short `description` fields are stamped by `stamp-versions` (`docs/stamp-descriptions.mjs`)
+  from `docs/descriptions.json`; the Homebrew `desc` is passed to `bump-brew` by
+  `publish-brew`. `.claude-plugin/marketplace.json` is read from git by Claude, so
+  its description stays committed/hand-maintained (not build-stamped).
 
 ## Don't re-advertise broken acquisition paths
 

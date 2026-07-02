@@ -109,18 +109,26 @@ row to assemble that listing's description.
    here because the per-channel descriptions are where the "assemble the rest"
    cross-links would live.
 
-7. **`go install` is advertised but currently broken.** The README "Go projects"
-   row and `publishing_setup.md`'s smoke test promise
-   `go install …/tools/lsp/cmd/twf@latest`, but `tools/lsp/go.mod` carries two
+7. **`go install` is broken for external users.** `tools/lsp/go.mod` carries two
    `replace` directives (`tools/spec => ../spec` and the `tliron/glsp` fork) and
    `go install pkg@version` **ignores** `replace` — so external resolution fails
    (`tools/spec` is pinned to a zero pseudo-version only the relative replace
-   satisfies; the glsp fork is the toolchain's documented temporary patch). Until
-   both replaces are gone (spec published as a real module + the upstream glsp PR
-   lands), `go install` should not be advertised anywhere, and **must not** be
-   cross-advertised on non-Go channels as an "assemble the rest" path.
+   satisfies; the glsp fork is the toolchain's documented temporary patch). The
+   advertising has been walked back: the toolchain README + `tools/lsp/cmd/twf/README.md`
+   now say clone-and-build-from-source only, the composed listings here don't
+   mention it, and `publishing_setup.md` / `packaging.md` were corrected to the
+   source-clone form. Until both replaces are gone (spec published as a real
+   module + the upstream glsp PR lands), `go install …@latest` must not be
+   re-advertised anywhere.
 
-## Strategy (decided) and what's deferred
+## Strategy (implemented) and what's deferred
+
+The compose pipeline described below is **live** (see `AGENTS.md` "How it works"):
+fragments in the toolchain's `docs/fragments/` ship inside their artifacts;
+`make stage-docs` + `make render-docs` (`docs/render.mjs`) compose the four
+generated (gitignored) package READMEs from `docs/templates/*.md`; descriptions
+are stamped by `stamp-versions` (`docs/stamp-descriptions.mjs`) from
+`docs/descriptions.json`, with the Homebrew `desc` passed to `bump-brew`.
 
 This component model *is* the fragment set for the compose system. Decisions:
 

@@ -100,7 +100,7 @@ After the next `v*` tag fires, each channel needs a real-world smoke test. CI gr
 | **Homebrew** | `brew untap jmbarzee/twf 2>/dev/null; brew install jmbarzee/twf/twf` on a fresh macOS shell | `twf --version` prints the tag |
 | **VS Code Marketplace** | Install `jmbarzee.twf-syntax` from a fresh VS Code profile; open a `.twf` file | LSP starts, diagnostics render, visualizer opens, skills appear under `~/.cursor/skills/temporal-architect-{design,author-go}/` |
 | **Open VSX** | Same, in Codium / Cursor with Open VSX registry configured | Same as VS Code Marketplace |
-| **`go install`** | `GOBIN=/tmp/twf-test go install github.com/jmbarzee/temporal-architect/tools/lsp/cmd/twf@vX.Y.Z` | binary builds; `twf --version` reports the tag |
+| **`go install`** (from a clone) | `git clone` the toolchain at the tag, then `cd tools/lsp && GOBIN=/tmp/twf-test go install ./cmd/twf` | binary builds; `twf --version` reports the tag. NOTE: external `go install …@vX.Y.Z` is **unsupported** (module `replace` directives that `go install pkg@version` ignores) — do not advertise it (documentation_propagation.md gap 7) |
 
 Failures here are typically credential-related (token scopes too narrow), name-reservation issues (package name not actually owned), or platform-specific wheel/sub-package gaps. The reusable workflows are designed so individual channel failures do not block other channels — see `packaging.md § C6`.
 
