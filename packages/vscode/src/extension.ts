@@ -162,7 +162,31 @@ export function activate(context: vscode.ExtensionContext) {
       const uris = await vscode.workspace.findFiles(pattern);
 
       if (uris.length === 0) {
-        vscode.window.showWarningMessage("No .twf files found in the selected folder");
+        // No .twf design files. Fall back to sampler-output detection: a tree
+        // of sampled workflow histories laid out as <namespace>/<type>/<id>.json,
+        // which `twf graph --history` renders as a graph-only (history-mode) view.
+        const jsonUris = await vscode.workspace.findFiles(
+          new vscode.RelativePattern(folderPath, "**/*.json")
+        );
+        // Only files at the exact sampler depth (<ns>/<type>/<id>.json, i.e. 3
+        // path segments relative to the root) count — this keeps arbitrary JSON
+        // folders from being misread as histories.
+        const looksLikeSample = jsonUris.some(
+          (u) => path.relative(folderPath, u.fsPath).split(path.sep).length === 3
+        );
+        if (looksLikeSample) {
+          await WorkflowVisualizerPanel.createOrShowForHistory(context.extensionUri, folderPath);
+          return;
+        }
+        if (jsonUris.length > 0) {
+          vscode.window.showWarningMessage(
+            "Folder has .json files but not the expected sampler layout (<namespace>/<type>/<id>.json)"
+          );
+          return;
+        }
+        vscode.window.showWarningMessage(
+          "No .twf files or sampled histories found in the selected folder"
+        );
         return;
       }
 
@@ -575,6 +599,11 @@ class WorkflowVisualizerPanel {
   private _folderPath: string;
   private _files: string[] = [];
   private _focusedFile: string | undefined;
+  // When set, the panel renders sampler output (a <ns>/<type>/<id>.json tree)
+  // via `twf graph --history <dir>` instead of parsing .twf files. Mutually
+  // exclusive with the .twf file mode: history mode has no AST, so the Graph
+  // view is the only view (see the visualizer's history mode).
+  private _historyDir: string | undefined;
   private _disposables: vscode.Disposable[] = [];
 
   /**
@@ -620,6 +649,9 @@ class WorkflowVisualizerPanel {
     if (WorkflowVisualizerPanel.currentPanel) {
       WorkflowVisualizerPanel.currentPanel._panel.reveal(column, true);
       WorkflowVisualizerPanel.currentPanel._folderPath = folderPath;
+      // Leaving history mode: reusing the panel for .twf files must clear the
+      // history dir so `_update` takes the parse path.
+      WorkflowVisualizerPanel.currentPanel._historyDir = undefined;
       WorkflowVisualizerPanel.currentPanel._setFiles(files);
       WorkflowVisualizerPanel.currentPanel._focusedFile = focusedFile;
       WorkflowVisualizerPanel.currentPanel._update();
@@ -627,7 +659,54 @@ class WorkflowVisualizerPanel {
     }
 
     // Create a new panel (preserveFocus to not steal from editor)
-    const panel = vscode.window.createWebviewPanel(
+    const panel = WorkflowVisualizerPanel._newWebviewPanel(extensionUri, column);
+
+    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
+      panel,
+      extensionUri,
+      folderPath,
+      files,
+      focusedFile
+    );
+  }
+
+  /**
+   * Create or show the visualizer for a folder of sampler output — a
+   * <namespace>/<type>/<id>.json history tree. There is no AST, so the panel
+   * renders graph-only (history mode) from `twf graph --history`.
+   */
+  public static async createOrShowForHistory(extensionUri: vscode.Uri, folderPath: string) {
+    const column = vscode.ViewColumn.Beside;
+
+    if (WorkflowVisualizerPanel.currentPanel) {
+      const panel = WorkflowVisualizerPanel.currentPanel;
+      panel._panel.reveal(column, true);
+      panel._folderPath = folderPath;
+      panel._historyDir = folderPath;
+      panel._setFiles([]);
+      panel._focusedFile = undefined;
+      panel._update();
+      return;
+    }
+
+    const panel = WorkflowVisualizerPanel._newWebviewPanel(extensionUri, column);
+
+    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
+      panel,
+      extensionUri,
+      folderPath,
+      [],
+      undefined,
+      folderPath
+    );
+  }
+
+  /** Shared webview-panel factory for both .twf and history entry points. */
+  private static _newWebviewPanel(
+    extensionUri: vscode.Uri,
+    column: vscode.ViewColumn
+  ): vscode.WebviewPanel {
+    return vscode.window.createWebviewPanel(
       WorkflowVisualizerPanel.viewType,
       "TWF Visualizer",
       { viewColumn: column, preserveFocus: true },
@@ -638,14 +717,6 @@ class WorkflowVisualizerPanel {
           vscode.Uri.joinPath(extensionUri, "dist", "webview"),
         ],
       }
-    );
-
-    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
-      panel,
-      extensionUri,
-      folderPath,
-      files,
-      focusedFile
     );
   }
 
@@ -673,6 +744,13 @@ class WorkflowVisualizerPanel {
     }
 
     const panel = WorkflowVisualizerPanel.currentPanel;
+
+    // History-mode panels aren't tied to a .twf editor; ignore focus churn so
+    // switching editors doesn't tear the sampler graph down into parse mode.
+    if (panel._historyDir) {
+      return;
+    }
+
     const newFolderPath = path.dirname(filePath);
     const sameFolder = newFolderPath === panel._folderPath;
     const sameFile = filePath === panel._focusedFile;
@@ -699,13 +777,15 @@ class WorkflowVisualizerPanel {
     extensionUri: vscode.Uri,
     folderPath: string,
     files: string[],
-    focusedFile: string | undefined
+    focusedFile: string | undefined,
+    historyDir?: string
   ) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._folderPath = folderPath;
     this._setFiles(files);
     this._focusedFile = focusedFile;
+    this._historyDir = historyDir;
 
     // Set initial HTML content
     this._panel.webview.html = this._getHtmlForWebview();
@@ -758,6 +838,20 @@ class WorkflowVisualizerPanel {
 
   private async _update() {
     try {
+      // History mode: no .twf files to parse. Synthesize an empty AST (which
+      // the visualizer reads as history mode -> Graph-only) and drive the graph
+      // and decomposition from `twf graph --history`.
+      if (this._historyDir) {
+        const parserGraph = await this._extractGraph();
+        const decomposition = await this._extractChunks();
+        const ast = { definitions: [] as unknown[], diagnostics: [] as TwfDiagnostic[] };
+        this._panel.webview.postMessage({
+          type: "ast",
+          data: { ast, parserGraph, decomposition },
+        });
+        return;
+      }
+
       const ast = await this._parseFilesWithMetadata();
       // `twf graph` is best-effort: graph extraction can fail in ways that
       // `twf parse` doesn't (e.g. binary not yet rebuilt), but the tree
@@ -788,7 +882,7 @@ class WorkflowVisualizerPanel {
    * than blocking the tree view.
    */
   private async _extractGraph(): Promise<unknown | undefined> {
-    if (this._files.length === 0) return undefined;
+    if (!this._historyDir && this._files.length === 0) return undefined;
 
     const config = vscode.workspace.getConfiguration("twf.parser");
     const configPath = config.get<string>("path", "");
@@ -802,12 +896,14 @@ class WorkflowVisualizerPanel {
       resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
     }
 
+    // History mode reads a sampler-output tree instead of file arguments;
+    // --history and file args are mutually exclusive in the CLI.
+    const graphArgs = this._historyDir
+      ? ["graph", "--json", "--history", this._historyDir]
+      : ["graph", "--json", ...this._files];
+
     try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, [
-        "graph",
-        "--json",
-        ...this._files,
-      ]);
+      const { stdout, stderr } = await execFileAsync(resolvedCommand, graphArgs);
       if (stderr) {
         console.warn("twf graph stderr:", stderr);
       }
@@ -838,7 +934,7 @@ class WorkflowVisualizerPanel {
    * the rest of the visualizer.
    */
   private async _extractChunks(): Promise<unknown | undefined> {
-    if (this._files.length === 0) return undefined;
+    if (!this._historyDir && this._files.length === 0) return undefined;
 
     const config = vscode.workspace.getConfiguration("twf.parser");
     const configPath = config.get<string>("path", "");
@@ -856,15 +952,14 @@ class WorkflowVisualizerPanel {
       .getConfiguration("twf.decompose")
       .get<number>("ceiling", 60);
 
+    // History mode reads a sampler-output tree instead of file arguments;
+    // --history and file args are mutually exclusive in the CLI.
+    const chunkArgs = this._historyDir
+      ? ["graph", "chunks", "--json", "--ceiling", String(ceiling), "--history", this._historyDir]
+      : ["graph", "chunks", "--json", "--ceiling", String(ceiling), ...this._files];
+
     try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, [
-        "graph",
-        "chunks",
-        "--json",
-        "--ceiling",
-        String(ceiling),
-        ...this._files,
-      ]);
+      const { stdout, stderr } = await execFileAsync(resolvedCommand, chunkArgs);
       if (stderr) {
         console.warn("twf graph chunks stderr:", stderr);
       }
