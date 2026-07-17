@@ -28,7 +28,7 @@ channel blurb is the only piece that lives here in **dist**.
 | 1 | **Global vision** | Devs working at *architecture* level: a parseable, validated, visual model of a whole Temporal system | root `README.md` tagline + "Why" (no dedicated fragment yet) | maybe (hero graph) | — (prose only) |
 | 2 | **Parser / `twf` binary** | CLI: `check`/`parse`/`symbols`/`graph`/`lsp`; embedded spec | `tools/lsp/cmd/twf/README.md`, `COMMANDS.md`, `root.go` | no | binary archives, npm `twf`, PyPI, Homebrew, `go install`, VSIX |
 | 2a | **MCP server** (`twf mcp`) | Agent entry point: parser tools + spec resources over stdio | `…/internal/command/mcp/mcp.go` (Long + instructions) | no | **subcommand of the binary** (no separate artifact) |
-| 3 | **Sampler** | Recover a deployment graph from sampled production history (`twf graph --history` intake) | `tools/sampler/README.md`, `main.go` | maybe (drift overlay) | **nowhere** — `go install` from source only |
+| 3 | **Sampler** | Recover a deployment graph from sampled production history (emits `observed-graph.json`, opened directly in the visualizer) | `tools/sampler/README.md`, `main.go` | maybe (drift overlay) | **nowhere** — `go install` from source only |
 | 4 | **Visualizer** | Interactive tree + graph of the system; the part where a picture is worth the pitch | `tools/visualizer/README.md`, `spec/PRODUCT.md`, `TREE_VIEW.md`, `GRAPH_VIEW.md` | **critical** | npm `visualizer` (lib), VSIX (webview) |
 | 5 | **Skills** | Design / author-go / author-infra agent skills | `skills/*/SKILL.md` frontmatter + per-skill `README.md` | no | skills tarball → VSIX, claude-plugin |
 | 6 | **Channel-specific** | Install method + packaging-format notes; always unique per target | per-target, in **dist** (and the 2 toolchain libs) | rarely | n/a |
@@ -61,8 +61,9 @@ row to assemble that listing's description.
 
 ## Gaps this view surfaces
 
-1. **Sampler is published nowhere.** It is a real capability (the intake for
-   `twf graph --history`, the seed for the observed-vs-designed overlay) but
+1. **Sampler is published nowhere.** It is a real capability (it emits the
+   `observed-graph.json` the visualizer renders, the seed for the
+   observed-vs-designed overlay) but
    ships only via `go install …/tools/sampler` from source — so it appears in no
    listing and no binary archive. Decisions: (a) fold its pitch into the Parser
    component and ship the `sampler` binary alongside `twf` in the relevant
