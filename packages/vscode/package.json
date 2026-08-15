@@ -168,6 +168,27 @@
           "minimum": 0,
           "description": "Complexity ceiling for the chunk-decomposition overlay in the Graph view. Chunks above it are offered division suggestions; 0 disables the overlay. Reload the visualizer after changing."
         },
+        "twf.decompose.floor": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Complexity floor for the chunk-decomposition overlay. Chunks below it are flagged as too granular to author on their own. 0 uses the tool's default. Reload the visualizer after changing."
+        },
+        "twf.decompose.maxDepth": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "How deep the decomposition recursively re-divides an over-ceiling section. Level 1 is a chunk's own divisions. 0 uses the tool's default. Reload the visualizer after changing."
+        },
+        "twf.decompose.strategies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tree", "nexus", "worker", "namespace", "service", "subtree"]
+          },
+          "default": [],
+          "description": "Bias which division strategies the decomposition suggests. `tree`/`nexus`/`worker`/`namespace` balance by use case; `service`/`subtree` optimize for authorship parallelism. Empty means all applicable strategies. Reload the visualizer after changing."
+        },
         "twf.mcp.autoRegister": {
           "type": "boolean",
           "default": true,
@@ -193,7 +214,7 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
-    "@temporal-architect/wire-types": "0.8.4",
+    "@temporal-architect/wire-types": "0.10.2",
     "@types/node": "^25.2.2",
     "@types/vscode": "^1.75.0",
     "typescript": "^5.3.0"

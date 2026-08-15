@@ -162,7 +162,24 @@ export function activate(context: vscode.ExtensionContext) {
       const uris = await vscode.workspace.findFiles(pattern);
 
       if (uris.length === 0) {
-        vscode.window.showWarningMessage("No .twf files found in the selected folder");
+        // No .twf design files. Fall back to sampler-output detection: the
+        // sampler writes a single observed-graph JSON (the deployment graph
+        // reconstructed from live history), which the visualizer renders as a
+        // graph-only (history-mode) view.
+        const observedUris = await vscode.workspace.findFiles(
+          new vscode.RelativePattern(folderPath, "**/observed-graph.json")
+        );
+        if (observedUris.length > 0) {
+          // Prefer the shallowest match if several exist under the folder.
+          const observedFile = observedUris
+            .map((u) => u.fsPath)
+            .sort((a, b) => a.split(path.sep).length - b.split(path.sep).length)[0];
+          await WorkflowVisualizerPanel.createOrShowForHistory(context.extensionUri, observedFile);
+          return;
+        }
+        vscode.window.showWarningMessage(
+          "No .twf files or sampler output (observed-graph.json) found in the selected folder"
+        );
         return;
       }
 
@@ -543,7 +560,8 @@ function startLanguageClient(context: vscode.ExtensionContext) {
   client.start().catch((err) => {
     vscode.window.showWarningMessage(
       `Failed to start TWF language server: ${err.message}. ` +
-      `Install it with: go install github.com/jmbarzee/temporal-architect/tools/lsp/cmd/twf@latest`
+      `The extension bundles a twf binary; if it is missing, reinstall the extension ` +
+      `or install twf with: curl -fsSL https://raw.githubusercontent.com/jmbarzee/temporal-architect-dist/main/packages/install.sh | sh`
     );
   });
 
@@ -575,6 +593,11 @@ class WorkflowVisualizerPanel {
   private _folderPath: string;
   private _files: string[] = [];
   private _focusedFile: string | undefined;
+  // When set, the panel renders the sampler's observed-graph JSON at this path
+  // instead of parsing .twf files. Mutually exclusive with the .twf file mode:
+  // history mode has no AST, so the Graph view is the only view (see the
+  // visualizer's history mode).
+  private _historyFile: string | undefined;
   private _disposables: vscode.Disposable[] = [];
 
   /**
@@ -620,6 +643,9 @@ class WorkflowVisualizerPanel {
     if (WorkflowVisualizerPanel.currentPanel) {
       WorkflowVisualizerPanel.currentPanel._panel.reveal(column, true);
       WorkflowVisualizerPanel.currentPanel._folderPath = folderPath;
+      // Leaving history mode: reusing the panel for .twf files must clear the
+      // history file so `_update` takes the parse path.
+      WorkflowVisualizerPanel.currentPanel._historyFile = undefined;
       WorkflowVisualizerPanel.currentPanel._setFiles(files);
       WorkflowVisualizerPanel.currentPanel._focusedFile = focusedFile;
       WorkflowVisualizerPanel.currentPanel._update();
@@ -627,7 +653,55 @@ class WorkflowVisualizerPanel {
     }
 
     // Create a new panel (preserveFocus to not steal from editor)
-    const panel = vscode.window.createWebviewPanel(
+    const panel = WorkflowVisualizerPanel._newWebviewPanel(extensionUri, column);
+
+    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
+      panel,
+      extensionUri,
+      folderPath,
+      files,
+      focusedFile
+    );
+  }
+
+  /**
+   * Create or show the visualizer for the sampler's observed-graph JSON. There
+   * is no AST, so the panel renders graph-only (history mode) from the file's
+   * contents.
+   */
+  public static async createOrShowForHistory(extensionUri: vscode.Uri, observedFile: string) {
+    const column = vscode.ViewColumn.Beside;
+    const folderPath = path.dirname(observedFile);
+
+    if (WorkflowVisualizerPanel.currentPanel) {
+      const panel = WorkflowVisualizerPanel.currentPanel;
+      panel._panel.reveal(column, true);
+      panel._folderPath = folderPath;
+      panel._historyFile = observedFile;
+      panel._setFiles([]);
+      panel._focusedFile = undefined;
+      panel._update();
+      return;
+    }
+
+    const panel = WorkflowVisualizerPanel._newWebviewPanel(extensionUri, column);
+
+    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
+      panel,
+      extensionUri,
+      folderPath,
+      [],
+      undefined,
+      observedFile
+    );
+  }
+
+  /** Shared webview-panel factory for both .twf and history entry points. */
+  private static _newWebviewPanel(
+    extensionUri: vscode.Uri,
+    column: vscode.ViewColumn
+  ): vscode.WebviewPanel {
+    return vscode.window.createWebviewPanel(
       WorkflowVisualizerPanel.viewType,
       "TWF Visualizer",
       { viewColumn: column, preserveFocus: true },
@@ -638,14 +712,6 @@ class WorkflowVisualizerPanel {
           vscode.Uri.joinPath(extensionUri, "dist", "webview"),
         ],
       }
-    );
-
-    WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
-      panel,
-      extensionUri,
-      folderPath,
-      files,
-      focusedFile
     );
   }
 
@@ -673,6 +739,13 @@ class WorkflowVisualizerPanel {
     }
 
     const panel = WorkflowVisualizerPanel.currentPanel;
+
+    // History-mode panels aren't tied to a .twf editor; ignore focus churn so
+    // switching editors doesn't tear the sampler graph down into parse mode.
+    if (panel._historyFile) {
+      return;
+    }
+
     const newFolderPath = path.dirname(filePath);
     const sameFolder = newFolderPath === panel._folderPath;
     const sameFile = filePath === panel._focusedFile;
@@ -699,13 +772,15 @@ class WorkflowVisualizerPanel {
     extensionUri: vscode.Uri,
     folderPath: string,
     files: string[],
-    focusedFile: string | undefined
+    focusedFile: string | undefined,
+    historyFile?: string
   ) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._folderPath = folderPath;
     this._setFiles(files);
     this._focusedFile = focusedFile;
+    this._historyFile = historyFile;
 
     // Set initial HTML content
     this._panel.webview.html = this._getHtmlForWebview();
@@ -758,6 +833,21 @@ class WorkflowVisualizerPanel {
 
   private async _update() {
     try {
+      // History mode: no .twf files to parse. Read the sampler's observed-graph
+      // JSON and project it to the ParserGraph the visualizer renders,
+      // synthesizing an empty AST (which the visualizer reads as history mode ->
+      // Graph-only). There is no decomposition in history mode (chunks require
+      // a .twf AST).
+      if (this._historyFile) {
+        const parserGraph = await this._readObservedGraph();
+        const ast = { definitions: [] as unknown[], diagnostics: [] as TwfDiagnostic[] };
+        this._panel.webview.postMessage({
+          type: "ast",
+          data: { ast, parserGraph },
+        });
+        return;
+      }
+
       const ast = await this._parseFilesWithMetadata();
       // `twf graph` is best-effort: graph extraction can fail in ways that
       // `twf parse` doesn't (e.g. binary not yet rebuilt), but the tree
@@ -802,12 +892,10 @@ class WorkflowVisualizerPanel {
       resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
     }
 
+    const graphArgs = ["graph", "--json", ...this._files];
+
     try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, [
-        "graph",
-        "--json",
-        ...this._files,
-      ]);
+      const { stdout, stderr } = await execFileAsync(resolvedCommand, graphArgs);
       if (stderr) {
         console.warn("twf graph stderr:", stderr);
       }
@@ -852,19 +940,24 @@ class WorkflowVisualizerPanel {
       resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
     }
 
-    const ceiling = vscode.workspace
-      .getConfiguration("twf.decompose")
-      .get<number>("ceiling", 60);
+    const decomposeCfg = vscode.workspace.getConfiguration("twf.decompose");
+    const ceiling = decomposeCfg.get<number>("ceiling", 60);
+    const floor = decomposeCfg.get<number>("floor", 0);
+    const maxDepth = decomposeCfg.get<number>("maxDepth", 0);
+    const strategies = decomposeCfg.get<string[]>("strategies", []);
+
+    // Only forward the optional knobs when set — 0 / [] means "leave it to the
+    // tool", and passing an explicit 0 would override the tool's own default.
+    const chunkArgs = ["graph", "chunks", "--json", "--ceiling", String(ceiling)];
+    if (floor > 0) chunkArgs.push("--floor", String(floor));
+    if (maxDepth > 0) chunkArgs.push("--max-depth", String(maxDepth));
+    // --by takes ONE comma-separated value, not repeated flags: repeating it
+    // would silently keep only the last strategy.
+    if (strategies.length > 0) chunkArgs.push("--by", strategies.join(","));
+    chunkArgs.push(...this._files);
 
     try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, [
-        "graph",
-        "chunks",
-        "--json",
-        "--ceiling",
-        String(ceiling),
-        ...this._files,
-      ]);
+      const { stdout, stderr } = await execFileAsync(resolvedCommand, chunkArgs);
       if (stderr) {
         console.warn("twf graph chunks stderr:", stderr);
       }
@@ -872,6 +965,39 @@ class WorkflowVisualizerPanel {
       return envelope.chunks;
     } catch (err) {
       console.warn("Failed to extract decomposition:", err);
+      return undefined;
+    }
+  }
+
+  /**
+   * Read the sampler's observed-graph JSON (`{ observedGraph: { window, …,
+   * edges: [{ …, buckets }] } }`) and project it to the ParserGraph the
+   * visualizer's Graph view consumes.
+   *
+   * The observed graph is a superset of a ParserGraph: it adds a `window` and a
+   * per-edge `buckets` occurrence series. We drop `window` and keep the rest —
+   * the extra `buckets` field on each edge is inert for rendering. Projecting
+   * here (rather than posting the raw envelope) keeps the extension decoupled
+   * from the bundled visualizer's payload-normalization version.
+   *
+   * Best-effort: a missing/malformed file logs and returns undefined, and the
+   * Graph view renders empty rather than throwing.
+   */
+  private async _readObservedGraph(): Promise<unknown | undefined> {
+    if (!this._historyFile) return undefined;
+    try {
+      const raw = await fs.promises.readFile(this._historyFile, "utf8");
+      const parsed = JSON.parse(raw) as { observedGraph?: Record<string, unknown> };
+      const og = parsed.observedGraph;
+      if (!og) {
+        console.warn("observed-graph.json has no observedGraph payload:", this._historyFile);
+        return undefined;
+      }
+      // Project ObservedGraph -> ParserGraph: everything but the time axis.
+      const { window: _window, ...parserGraph } = og;
+      return parserGraph;
+    } catch (err) {
+      console.warn("Failed to read observed graph:", err);
       return undefined;
     }
   }

@@ -11,7 +11,7 @@ Search for **"Temporal Architect"** in the VS Code or Cursor extension marketpla
 - **Live diagnostics** — undefined activities, broken references, duplicate definitions, and determinism traps flagged as you type, plus completions, hover, go-to-definition, references, and rename.
 - **Interactive visualizer** — open any `.twf` file as a Graph View or Tree View from the editor title bar or command palette.
 - **System-design skills** — Design, Go authoring, and Infra provisioning, available to your AI agent.
-- **Bundled `twf` CLI** — the same parser/LSP binary on your PATH, including `twf graph --history <dir>` to recover a deployment graph from sampled production histories.
+- **Bundled `twf` CLI** — the same parser/LSP binary on your PATH. Pair it with the sampler to recover a deployment graph from sampled production history (open the resulting `observed-graph.json` folder in the visualizer).
 
 ## Commands
 

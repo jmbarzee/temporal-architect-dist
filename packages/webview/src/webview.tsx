@@ -32,8 +32,9 @@ const vscode = acquireVsCodeApi()
 ;(window as unknown as { __twfVsCodeApi?: typeof vscode }).__twfVsCodeApi = vscode
 
 // The `ast` message from the VS Code extension carries one of: the wrapped
-// `{ ast, parserGraph }` envelope, a bare AST payload, or `twf graph --json`
-// output (`{ graph }`, history mode). normalizePayload handles all shapes.
+// `{ ast, parserGraph }` envelope (used for both .twf design mode and, projected
+// from the sampler's observed graph, history mode) or a bare AST payload.
+// normalizePayload handles these plus the raw graph/observed-graph envelopes.
 //
 // Note: `ast.diagnostics` (structured warnings/errors from `twf parse`'s
 // envelope) and `ast.errors` (catastrophic parser-process failures) both
