@@ -560,7 +560,8 @@ function startLanguageClient(context: vscode.ExtensionContext) {
   client.start().catch((err) => {
     vscode.window.showWarningMessage(
       `Failed to start TWF language server: ${err.message}. ` +
-      `Install it with: go install github.com/jmbarzee/temporal-architect/tools/lsp/cmd/twf@latest`
+      `The extension bundles a twf binary; if it is missing, reinstall the extension ` +
+      `or install twf with: curl -fsSL https://raw.githubusercontent.com/jmbarzee/temporal-architect-dist/main/packages/install.sh | sh`
     );
   });
 
@@ -939,11 +940,21 @@ class WorkflowVisualizerPanel {
       resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
     }
 
-    const ceiling = vscode.workspace
-      .getConfiguration("twf.decompose")
-      .get<number>("ceiling", 60);
+    const decomposeCfg = vscode.workspace.getConfiguration("twf.decompose");
+    const ceiling = decomposeCfg.get<number>("ceiling", 60);
+    const floor = decomposeCfg.get<number>("floor", 0);
+    const maxDepth = decomposeCfg.get<number>("maxDepth", 0);
+    const strategies = decomposeCfg.get<string[]>("strategies", []);
 
-    const chunkArgs = ["graph", "chunks", "--json", "--ceiling", String(ceiling), ...this._files];
+    // Only forward the optional knobs when set — 0 / [] means "leave it to the
+    // tool", and passing an explicit 0 would override the tool's own default.
+    const chunkArgs = ["graph", "chunks", "--json", "--ceiling", String(ceiling)];
+    if (floor > 0) chunkArgs.push("--floor", String(floor));
+    if (maxDepth > 0) chunkArgs.push("--max-depth", String(maxDepth));
+    // --by takes ONE comma-separated value, not repeated flags: repeating it
+    // would silently keep only the last strategy.
+    if (strategies.length > 0) chunkArgs.push("--by", strategies.join(","));
+    chunkArgs.push(...this._files);
 
     try {
       const { stdout, stderr } = await execFileAsync(resolvedCommand, chunkArgs);

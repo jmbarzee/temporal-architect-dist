@@ -59,68 +59,25 @@ artifact; — = out of scope for that listing.
 Read down a column to see how widely a component must propagate; read across a
 row to assemble that listing's description.
 
-## Gaps this view surfaces
+## Known gaps
 
-1. **Sampler is published nowhere.** It is a real capability (it emits the
-   `observed-graph.json` the visualizer renders, the seed for the
-   observed-vs-designed overlay) but
-   ships only via `go install …/tools/sampler` from source — so it appears in no
-   listing and no binary archive. Decisions: (a) fold its pitch into the Parser
-   component and ship the `sampler` binary alongside `twf` in the relevant
-   channels, or (b) leave it dev-only and document that explicitly. Today it is
-   silently invisible — the `(adv?)` cells above are the open question of whether
-   any binary channel should foreground it.
+Each is tracked as an issue; this section names them so the matrix above is read with its
+limitations in view.
 
-2. **MCP is real now, but bundled-only.** `twf mcp` exists and is registered;
-   the long-standing "advertised but doesn't exist" gap (see
-   [`full_toolchain_distribution.md`](../temporal-architect/full_toolchain_distribution.md))
-   is resolved for the parser-tools + spec-resources surface. Two residual
-   doc-truth issues: (a) **skills are not exposed over MCP yet** (the binary
-   doesn't embed them — parked M1); the previously over-promising "MCP exposes
-   skill prompts" copy has been removed from the package READMEs, and should stay
-   out until M1 lands; (b) there is **no MCP-only distribution** — every MCP user
-   receives the whole binary and invokes one subcommand. That is fine, but it
-   means a Smithery listing (future) is the first doc whose pitch is *MCP only*.
-
-3. **"Several binaries?" — mostly a no, except the sampler.** Cutting the `twf`
-   binary apart (e.g. a standalone `mcp` binary) would multiply the platform
-   archive/sub-package matrix for little gain, since MCP is just a subcommand and
-   MCP-only channels already work via `twf mcp`. The genuine "extra binary" is
-   the **sampler**, which already is a separate `main` and is the actual
-   multi-binary decision to make (see gap 1).
-
-4. **Visualizer: one pitch, two delivery forms, no images.** The npm `visualizer`
-   (embeddable React lib) and the VSIX **webview** are the same product and
-   should share one pitch, but today they carry separate hand-written copy.
-   Images are *critical* here and are currently **absent** (only commented
-   `docs/images/…` placeholders exist). The compose system must (a) source one
-   canonical visualizer pitch consumed by both forms, and (b) solve image
-   hosting — real image files in the toolchain, referenced by **release-pinned
-   absolute URLs** so every registry renders them.
-
-5. **Global vision is duplicated and divergent.** The core "architecture-level"
-   pitch is re-typed (with drift) in the root README, the VSIX page, and the
-   npm/PyPI READMEs. This is the central driver for the SSOT effort: one shared
-   vision fragment, included by every channel.
-
-6. **Full-toolchain assembly gap (carried over).** No single channel delivers all
-   of {parser, MCP, visualizer, skills} *and* points the user to the rest;
-   binary-only channels ship no skills, skill-only channels don't say how to get
-   the binary. Tracked in the parked `full_toolchain_distribution.md`; relevant
-   here because the per-channel descriptions are where the "assemble the rest"
-   cross-links would live.
-
-7. **`go install` is broken for external users.** `tools/lsp/go.mod` carries two
-   `replace` directives (`tools/spec => ../spec` and the `tliron/glsp` fork) and
-   `go install pkg@version` **ignores** `replace` — so external resolution fails
-   (`tools/spec` is pinned to a zero pseudo-version only the relative replace
-   satisfies; the glsp fork is the toolchain's documented temporary patch). The
-   advertising has been walked back: the toolchain README + `tools/lsp/cmd/twf/README.md`
-   now say clone-and-build-from-source only, the composed listings here don't
-   mention it, and `publishing_setup.md` / `packaging.md` were corrected to the
-   source-clone form. Until both replaces are gone (spec published as a real
-   module + the upstream glsp PR lands), `go install …@latest` must not be
-   re-advertised anywhere.
+- **The sampler is published nowhere** — real capability, source-install only, so it appears in no
+  listing. Also the one genuine multi-binary decision. [#7](https://github.com/jmbarzee/temporal-architect-dist/issues/7)
+- **Visualizer: one product, two delivery forms, no images** — the npm library and the VSIX webview
+  carry separate hand-written copy, and images are absent. [#8](https://github.com/jmbarzee/temporal-architect-dist/issues/8)
+- **The global vision pitch is duplicated and divergent** across the root README, the VSIX page, and
+  the npm/PyPI READMEs. The central driver of the SSOT effort. [#9](https://github.com/jmbarzee/temporal-architect-dist/issues/9)
+- **MCP is bundled-only** — every MCP user receives the whole binary and invokes one subcommand.
+  That is fine, but it makes a Smithery listing the first MCP-only pitch. [#6](https://github.com/jmbarzee/temporal-architect-dist/issues/6). Skills are
+  still not exposed over MCP (the binary does not embed them — toolchain [#77](https://github.com/jmbarzee/temporal-architect/issues/77)); that copy
+  stays out of the listings until it lands.
+- **`go install` is broken for external users** — `tools/lsp/go.mod` carries two `replace` directives
+  and `go install pkg@version` ignores them. The advertising has been walked back everywhere,
+  including the extension's language-server failure message. It must not be re-advertised until both
+  replaces are gone.
 
 ## Strategy (implemented) and what's deferred
 
@@ -154,7 +111,3 @@ This component model *is* the fragment set for the compose system. Decisions:
   hand-edited**. The per-target headers are the only doc source tracked in dist.
 - **Descriptions.** Short `description` fields are stamped from the same source
   by extending `stamp-versions`.
-
-**Deferred:** the **sampler** publish + pitch (revisit when we publish it —
-gap 1); foregrounding MCP/sampler beyond "advertised" (gaps 1–3); fixing and
-re-advertising `go install` (gap 7).

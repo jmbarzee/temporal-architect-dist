@@ -56,10 +56,22 @@ keep channels in sync per their row — do not introduce a new hand-written pitc
   `publish-brew`. `.claude-plugin/marketplace.json` is read from git by Claude, so
   its description stays committed/hand-maintained (not build-stamped).
 
+## Planning lives in GitHub issues, not in this repo
+
+Backlog, roadmap, milestones, and status-of-work bookkeeping belong in
+[issues](https://github.com/jmbarzee/temporal-architect-dist/issues), not in a tracked file. When you defer something, open an issue — do not start a
+backlog file or add a "Future:" section.
+
+What legitimately stays: documentation of how the system **currently** works (`packaging.md` channel
+design and conventions, `documentation_propagation.md` component matrix and compose pipeline,
+`publishing_setup.md` rollout state), and configuration the tooling reads.
+
+Engine work — anything shipping inside the `twf` binary — is filed against the toolchain repo
+(`jmbarzee/temporal-architect`), not here.
+
 ## Don't re-advertise broken acquisition paths
 
 `go install …/tools/lsp/cmd/twf@latest` is currently **broken** for external
 users (the toolchain's `tools/lsp/go.mod` has `replace` directives that
 `go install pkg@version` ignores). Do not add or cross-advertise it on any
-channel until the toolchain drops those replaces. See
-`documentation_propagation.md` gap 7.
+channel until the toolchain drops those replaces. See `documentation_propagation.md` § Known gaps.

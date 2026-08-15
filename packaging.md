@@ -160,55 +160,20 @@ The dev-cycle harness (the `.claude/skills/dev-cycle/` skill plus its manifest `
 
 ---
 
-## Goals
+## Extension PATH wiring
 
-> **Engine milestones live in the toolchain.** M1 (self-describing binary),
-> M2 (MCP server), and M4 (`twf init` scaffolder) are `twf` binary features —
-> they moved to the toolchain's
-> [`ROADMAP.md`](https://github.com/jmbarzee/temporal-architect/blob/main/ROADMAP.md).
-> What remains here are the distribution-side milestones: extension PATH wiring
-> (M3), go-live (M5), and the docs site (M6).
+`linkTwfOnPath` in `packages/vscode/src/extension.ts` symlinks the bundled `twf` into `~/.local/bin`
+on activation (a copy on Windows), refreshes it per version, and guards a user-managed `twf` via a
+`globalState`-recorded ownership marker.
 
-### M3 — Agent-discoverable binary on PATH
-
-**Status:** 3.1 + 3.2 + 3.3 done — `linkTwfOnPath` in `packages/vscode/src/extension.ts` symlinks the bundled `twf` into `~/.local/bin` on activation (copy on Windows), refreshes per version, and guards a user-managed `twf` via a `globalState`-recorded ownership marker. 3.3 (skill/onboarding note) landed via the reposition: the README "Skills" section documents that skills assume `twf` on PATH and the agent's graph surface is `twf graph --json` (the visualizer GUI stays human-facing via `twf.visualize`).
-
-The extension bundles `twf` and prepends its `bin/` to the **integrated terminal** via
-`environmentVariableCollection` (`setupTerminalPath`), but that does **not** reach the AI agent's
-shell — confirmed empirically: in an agent shell with the extension installed, `twf` resolves only
-if the user separately `go install`ed it (`~/go/bin/twf`); the extension `bin/` is absent from the
-agent PATH. So extension-only users (the common case) get an AI that can't find `twf` and digs around
-or runs full paths. (This was the reverse-engineering reflection's recurring friction.)
-
-| | Work | Effort |
-|---|---|---|
-| 3.1 | On activation, symlink (or copy) bundled `twf` into a dir already on the agent PATH — `~/.local/bin/twf` on macOS/Linux (confirmed present; already holds `claude`), platform equivalent on Windows. Refresh on each activation so it tracks the extension version. | S |
-| 3.2 | Guard: don't clobber a user-managed `twf` (e.g. if `~/.local/bin/twf` exists and isn't our symlink, leave it / warn). Keep the existing integrated-terminal `environmentVariableCollection` for human terminals. | S |
-| 3.3 | **Done.** Skill/onboarding note: skills assume `twf` on PATH; the **visualizer** is not a CLI — the agent's surface to graph data is `twf graph --json` (the GUI stays human-facing via the `twf.visualize` command). Landed in the README "Skills" section via the reposition. | S |
-
-**Acceptance:** With only the extension installed (no `go install`), a fresh agent shell resolves
-`twf` on PATH and `twf graph --json` works. No path-digging.
-
-**Why it matters (North Star):** keeping the AI out of "where is the tool" busywork is exactly the
+This exists because the extension's `environmentVariableCollection` prepends its `bin/` to the
+**integrated terminal** only — that does not reach the AI agent's shell. Without the symlink, an
+extension-only user (the common case) gets an agent that cannot find `twf` and resorts to
+path-digging or full paths. Keeping the AI out of "where is the tool" busywork is the
 context-protection the project is built on.
 
-### M5 — Go live (external accounts + first publish)
-
-External event-driven. Stand up the remaining external accounts so the next tag
-push doesn't fail on new publish channels (see [External account checklist](#external-account-checklist)),
-then cut a `v*` tag to publish on every channel for the first time.
-
-**Effort:** account creation latency plus one real-tag run; see [`publishing_setup.md`](./publishing_setup.md).
-
-### M6 — GitHub Pages docs site (optional polish)
-
-Static site from `tools/spec/sections/*.md` + `skills/**/*.md` + the standalone visualizer build, hosted at `<user>.github.io/temporal-architect/`. mkdocs-material or Docusaurus.
-
-**Recommended:** defer until M1-M5 are settled. Lowest leverage in the plan.
-
-**Effort:** ~1-2 days.
-
----
+Remaining distribution work is tracked as GitHub issues: going live on the new publish channels
+([#4](https://github.com/jmbarzee/temporal-architect-dist/issues/4)) and the optional docs site ([#5](https://github.com/jmbarzee/temporal-architect-dist/issues/5)).
 
 ## External account checklist
 
@@ -223,18 +188,11 @@ Out-of-band steps required before the next tag push works end-to-end. None can b
 | npm | scope `@temporal-architect` (claimed for visualizer) | `NPM_TOKEN` (reused for `@temporal-architect/twf*`) |
 | GitHub Releases | repo `jmbarzee/temporal-architect` | (built-in `GITHUB_TOKEN`) |
 
-### Pending (block next tag push on the new channels)
+### Pending
 
-| Channel | What to register | GitHub secret | One-time setup |
-|---|---|---|---|
-| **PyPI** | Create account at pypi.org. Reserve `twf-cli` (or chosen alternative) by publishing v0.0.0 or first real release. | `PYPI_TOKEN` (API token from pypi.org → Account settings → API tokens; scope to the project once reserved) | Account verification (email), 2FA strongly recommended, optional TestPyPI account for dry-runs. |
-| **Homebrew tap** | Create `jmbarzee/homebrew-twf` (or matching the chosen tap pattern). Push one initial `Formula/twf.rb` (any version is fine; first `bump-brew` run overwrites). | `HOMEBREW_TAP_TOKEN` (PAT with `repo` write scope on the tap repo) | One-time `brew tap-new jmbarzee/twf` locally → push. |
-
-### Post-M2
-
-| Channel | What to register | Notes |
-|---|---|---|
-| Smithery MCP registry | Submit MCP server at smithery.ai/new with the install line. Optionally `/.well-known/mcp/server-card.json` in the repo for auto-extraction. | Free; no secret needed (Smithery proxies/lists). |
+PyPI and the Homebrew tap still need accounts and secrets before the next tag push succeeds on
+those channels — tracked as [#4](https://github.com/jmbarzee/temporal-architect-dist/issues/4), together with the Smithery MCP registry submission
+([#6](https://github.com/jmbarzee/temporal-architect-dist/issues/6)).
 
 ### Final secrets table
 
@@ -249,21 +207,6 @@ What `release.yml`'s reusable workflows expect, in one place:
 | `HOMEBREW_TAP_TOKEN` | `_publish-brew.yml` | every release | github.com → Settings → Developer settings → PAT (`repo` scope on `<owner>/homebrew-twf`) |
 
 Missing secrets fail the corresponding job with a clear "Error: <SECRET> not set" message; other jobs proceed independently.
-
----
-
-## Suggested sequencing
-
-Engine milestones (M1, M2, M4) are sequenced in the toolchain
-[`ROADMAP.md`](https://github.com/jmbarzee/temporal-architect/blob/main/ROADMAP.md).
-Distribution-side, in order:
-
-1. **External account setup** (§ External account checklist) — can happen any time; gates the first publish.
-2. **Go live (M5)** — cut the next `v*` tag once external accounts exist; smoke-test each channel per [`publishing_setup.md`](./publishing_setup.md).
-3. **M6** if there's appetite for a docs site.
-
-Total remaining (distribution): external account setup + first publish, plus the optional docs site;
-engine milestones are tracked separately in the toolchain roadmap.
 
 ---
 
