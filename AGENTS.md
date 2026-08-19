@@ -51,6 +51,10 @@ keep channels in sync per their row — do not introduce a new hand-written pitc
 - The composed `packages/**/README.md` are **generated build output, gitignored**
   — never hand-edit them. To change shared copy, edit the toolchain fragment; to
   change channel-specific copy, edit `docs/templates/<target>.md`.
+- The repo-root `README.md` (the user-facing storefront landing page) is composed
+  the same way from `docs/templates/root.md` + `{{fragment:global}}`, but it is
+  **committed** (not gitignored) so GitHub renders it — edit the template, then
+  `make render-docs` and commit the result; never hand-edit `README.md`.
 - Short `description` fields are stamped by `stamp-versions` (`docs/stamp-descriptions.mjs`)
   from `docs/descriptions.json`; the Homebrew `desc` is passed to `bump-brew` by
   `publish-brew`. `.claude-plugin/marketplace.json` is read from git by Claude, so

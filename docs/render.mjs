@@ -15,8 +15,12 @@
 // Relative image refs (images/x.png) are rewritten to release-pinned absolute
 // URLs so every registry renders the picture that matches the published tag.
 //
-// Rendered READMEs are generated build output (gitignored). Never hand-edit
-// them — edit the toolchain fragment or the per-target template in docs/templates/.
+// Rendered READMEs are generated output. Never hand-edit them — edit the
+// toolchain fragment or the per-target template in docs/templates/. The four
+// package READMEs are gitignored build artifacts (regenerated at publish time);
+// the repo-root README.md (the `root` target) is a *committed* generated file —
+// the storefront landing page GitHub renders — so it stays tracked and is
+// re-rendered + committed when the shared pitch changes.
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -26,7 +30,10 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const IMAGE_REPO = "jmbarzee/temporal-architect";
 
 // target -> { template (in docs/templates), output README path } (repo-relative)
+// `root` writes the committed storefront landing page; the rest are gitignored
+// package READMEs regenerated at publish time.
 const TARGETS = {
+  root: { template: "root.md", out: "README.md" },
   vscode: { template: "vscode.md", out: "packages/vscode/README.md" },
   "npm-twf": { template: "npm-twf.md", out: "packages/npm/twf/README.md" },
   pypi: { template: "pypi.md", out: "packages/pypi/twf-cli/README.md" },
