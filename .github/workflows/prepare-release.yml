@@ -1,0 +1,128 @@
+name: Prepare Release
+
+# Entry point. Fired by the toolchain repo (jmbarzee/temporal-architect) via
+# repository_dispatch after it cuts a GitHub Release. Rather than publish
+# directly, this opens a human-gated PR that stamps the new version into every
+# committed manifest (.claude-plugin/marketplace.json — which Claude Code reads
+# straight from git — plus the cosmetic package manifests). Merging that PR IS
+# the release approval: the push to main triggers _consume-release.yml, which
+# publishes every channel. See packaging.md C5.
+#
+# The gate lives here (dist), not upstream: the toolchain just announces a
+# version; how that becomes released packages is entirely dist's business.
+#
+# Manual run: "Run workflow" (workflow_dispatch) with a version, e.g. to
+# re-open a bump PR that was closed.
+
+on:
+  repository_dispatch:
+    types: [toolchain-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Toolchain release version to prepare, e.g. v0.3.2"
+        required: true
+        type: string
+
+# Serialize dispatches so a burst of releases can't race the shared branch/PR
+# bookkeeping. Newer runs queue behind older ones (never cancel — each must
+# finish its supersede sweep).
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the release/v* branch, delete superseded branches
+  pull-requests: write # open + close bump PRs
+
+jobs:
+  prepare:
+    name: Open manifest-bump PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve + normalize version
+        id: v
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event.client_payload.version || github.event.inputs.version }}"
+          [ -n "$RAW" ] || { echo "::error::no version in dispatch payload or input"; exit 1; }
+          VER="${RAW#v}" # normalize once: manifests + branch names never carry the leading 'v'
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Preparing release v$VER"
+
+      - name: Guard — refuse a downgrade, skip if main is already current
+        id: guard
+        run: |
+          set -euo pipefail
+          VER="${{ steps.v.outputs.version }}"
+          CUR=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+          echo "main committed: $CUR   incoming: $VER"
+          if [ "$VER" = "$CUR" ]; then
+            echo "main already at $VER — nothing to prepare."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          newest=$(printf '%s\n%s\n' "$CUR" "$VER" | sort -V | tail -1)
+          if [ "$newest" != "$VER" ]; then
+            echo "::error::incoming $VER is older than main's $CUR — refusing downgrade."
+            exit 1
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp committed manifests
+        if: steps.guard.outputs.skip != 'true'
+        run: make stamp-committed-versions VERSION=${{ steps.v.outputs.version }}
+
+      - name: Open / refresh bump PR and supersede older ones
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/v$VER"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # (Re)build the branch from the stamped tree. Force is safe: the branch
+          # is bot-owned and manifests-only — never hand-edit it. Stage only the
+          # manifest paths stamp-committed-versions touches, so nothing else can
+          # ever leak into the commit.
+          git checkout -b "$BRANCH"
+          git add .claude-plugin/marketplace.json \
+                  packages/vscode/package.json \
+                  packages/npm/twf/package.json \
+                  packages/npm/twf-*/package.json \
+                  packages/npm/claude-plugin/package.json \
+                  packages/pypi/twf-cli/pyproject.toml \
+                  packages/pypi/twf-cli/src/twf_cli/__init__.py
+          git commit -m "release: stamp committed manifests to v$VER"
+          git push -f origin "$BRANCH"
+
+          # Open the PR only if one isn't already open for this branch — a
+          # re-dispatch of the same version just refreshes the branch above.
+          if [ -z "$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number')" ]; then
+            BODY=$(printf '%s\n' \
+              "Automated manifest bump to \`v$VER\`, stamped by \`prepare-release.yml\`." \
+              "" \
+              "Merging this PR is the release approval: the push to \`main\` triggers \`_consume-release.yml\`, which publishes every channel at \`v$VER\`. Until then \`main\` — and the marketplace Claude Code reads straight from git — stays at the previous version." \
+              "" \
+              "Manifest versions only, no build artifacts. Auto-superseded if a newer release lands first.")
+            gh pr create --base main --head "$BRANCH" \
+              --title "release: stamp manifests to v$VER" \
+              --body "$BODY"
+          fi
+
+          # Supersede any older open release PRs — latest wins (see packaging.md C5).
+          gh pr list --state open --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("release/v")) | select(.headRefName != "'"$BRANCH"'") | .number' \
+          | while read -r n; do
+              [ -n "$n" ] || continue
+              echo "Closing superseded release PR #$n"
+              gh pr close "$n" --comment "Superseded by v$VER." --delete-branch
+            done

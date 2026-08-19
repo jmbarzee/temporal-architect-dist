@@ -1,8 +1,8 @@
 name: _check-versions
 
 # Reusable: stamp the incoming version into every dist manifest, then assert it
-# took. Dist never tags independently — the version is the one carried in the
-# repository_dispatch payload from the toolchain release.
+# took. Dist never tags independently — the version is the one committed in the
+# manifests (bumped by prepare-release.yml's PR and read back by the publisher).
 
 on:
   workflow_call:
@@ -28,9 +28,9 @@ jobs:
         # Ephemeral pre-flight: stamps this throwaway checkout and asserts every
         # manifest took the release version, catching a structural regression
         # before any channel publishes. main's committed manifests are made
-        # authoritative separately, by the commit-manifests job in
-        # _consume-release.yml (which pushes the stamped versions back to main
-        # after every channel publishes) — so no committed pin is ever stale (#11).
+        # authoritative separately, by prepare-release.yml — it stamps them into
+        # a human-gated release/v* PR whose merge triggers the publisher, so no
+        # committed pin is ever stale (#11).
         run: make stamp-versions VERSION=${{ inputs.version }}
       - name: Verify every manifest matches
         run: make check-versions VERSION=${{ inputs.version }}

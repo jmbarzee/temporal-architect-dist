@@ -53,17 +53,31 @@ require-version:
 fetch-release: require-version
 	@mkdir -p $(ASSETS)
 	gh release download v$(VER) -R $(SRC_REPO) -D $(ASSETS) --clobber
+	@# Guardrail: the asset names are a contract with the toolchain's release
+	@# matrix (see PLATFORMS). If the toolchain ever renames or drops an asset,
+	@# fail here with the exact missing name instead of surfacing deep inside a
+	@# later stage-* step. This is the one place the two repos are coupled.
+	@missing=""; \
+	for pt in $(PLATFORMS); do \
+		os=$$(echo $$pt | cut -d: -f2); arch=$$(echo $$pt | cut -d: -f3); \
+		if [ "$$os" = "windows" ]; then f="twf-v$(VER)-$$os-$$arch.zip"; else f="twf-v$(VER)-$$os-$$arch.tar.gz"; fi; \
+		[ -f "$(ASSETS)/$$f" ] || missing="$$missing $$f"; \
+	done; \
+	for f in skills-v$(VER).tar.gz temporal-architect-visualizer-$(VER).tgz temporal-architect-wire-types-$(VER).tgz; do \
+		[ -f "$(ASSETS)/$$f" ] || missing="$$missing $$f"; \
+	done; \
+	if [ -n "$$missing" ]; then echo "::error::fetch-release: missing expected Release asset(s) for v$(VER):$$missing"; exit 1; fi
 	@echo "Fetched release v$(VER) assets into $(ASSETS)/"
 
 ## Stamp the incoming version into every *committed* manifest — the subset of
 ## edits whose result belongs in git and is the real, published version. This is
-## the source of truth for the release's commit-manifests job, which runs this
-## target on main and pushes the result back so no committed version is ever
-## stale or cosmetic: marketplace.json is read from git by Claude Code, and the
-## rest are kept honest for anyone reading the repo (issues #2, #11). Deliberately
-## excludes the build-only rewrites (the file: tarball deps) and the composed
-## descriptions (they need staged Release assets) — those are ephemeral to a CI
-## checkout and must NEVER be committed; they live in stamp-versions below.
+## the source of truth for prepare-release.yml, which runs this target on main
+## and opens a human-gated release/v* PR; merging it bumps the committed versions
+## so none is ever stale or cosmetic: marketplace.json is read from git by Claude
+## Code, and the rest are kept honest for anyone reading the repo (issues #2, #11).
+## Deliberately excludes the build-only rewrites (the file: tarball deps) and the
+## composed descriptions (they need staged Release assets) — those are ephemeral
+## to a CI checkout and must NEVER be committed; they live in stamp-versions below.
 stamp-committed-versions: require-version
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/npm/twf/package.json && rm -f packages/npm/twf/package.json.bak
@@ -87,7 +101,7 @@ stamp-committed-versions: require-version
 ## plus the build-only rewrites — the extension's wire-types dep repointed at the
 ## downloaded tarball, and each channel's composed description. Those extra edits
 ## point at dist-assets/ that only exists in a release checkout, so they are
-## ephemeral and must never be committed (that is why commit-manifests runs
+## ephemeral and must never be committed (that is why prepare-release.yml runs
 ## stamp-committed-versions, not this target).
 stamp-versions: require-version stamp-committed-versions
 	@# Extension builds against the wire-types tarball downloaded from the toolchain

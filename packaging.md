@@ -75,8 +75,13 @@ release.yml (release-cutter + library publisher)
   +-- dispatch-dist            repository_dispatch {version} -> dist repo (DIST_DISPATCH_TOKEN)
         |
         v
-[dist repo]  _consume-release.yml (on repository_dispatch: toolchain-release)
-  +-- download all Release assets; stamp manifests to vX.Y.Z; _check-versions
+[dist repo]  prepare-release.yml (on repository_dispatch: toolchain-release)
+  +-- stamp committed manifests to vX.Y.Z on a release/vX.Y.Z branch
+  +-- open a human-gated bump PR (supersede any older open release PR)
+        |
+        v  (a maintainer merges the PR — the release approval)
+[dist repo]  _consume-release.yml (on push: main, manifest paths)
+  +-- read committed version; skip if already on npm; _check-versions
   +-- _publish-vsix             VS Code Marketplace + Open VSX (builds webview from visualizer lib)
   +-- _publish-npm-twf          @temporal-architect/twf + 5 platform sub-packages
   +-- _publish-npm-claude-plugin @temporal-architect/claude-plugin
@@ -144,9 +149,15 @@ Targets follow `<verb>-<thing>[-<variant>]`:
 
 `_check-versions.yml` stamps the release version into every manifest (`make stamp-versions`) in a throwaway checkout, then asserts it took (`make check-versions`) as a pre-flight gate — one `check_node`/`check_pyproject` call per manifest, inline bash, no extracted Go validator. This gate only proves stamping is structurally sound; it does not change main.
 
-**The committed versions on main are made honest automatically.** Every publish job builds from an ephemeral stamped checkout, so main's *committed* manifests never move on their own and drift stale — deceptive to anyone reading the repo, and actively wrong for `.claude-plugin/marketplace.json`, the one manifest Claude Code reads straight from git (main) rather than a registry (so its committed pin *is* what consumers install; drift there strands them on stale skills — issue #11). The `commit-manifests` job in `_consume-release.yml` closes this: gated on **all** publishes succeeding, it runs `make stamp-committed-versions` on main and pushes the result back, so every committed version equals the just-published one. It is idempotent (a re-run whose main is already current makes no commit) and needs no human bump — the old discipline of hand-committing a `release: vX.Y.Z` bump is gone.
+**The committed versions on main are made honest through a human-gated PR.** Every publish job builds from an ephemeral stamped checkout, so main's *committed* manifests never move on their own and drift stale — deceptive to anyone reading the repo, and actively wrong for `.claude-plugin/marketplace.json`, the one manifest Claude Code reads straight from git (main) rather than a registry (so its committed pin *is* what consumers install; drift there strands them on stale skills — issue #11). The flow inverts to make main the source of truth:
 
-The split between `stamp-committed-versions` (version fields — committed) and the fuller `stamp-versions` (adds the build-only `file:` tarball deps + composed descriptions — ephemeral, never committed) is what makes the commit-back safe: it can only ever touch version numbers, never a build artifact path. The MCP launch line in marketplace.json is pinned to the release version by the same target, so the `twf` MCP binary and the plugin's skills always move in lockstep (issue #2).
+1. **`prepare-release.yml`** (on the toolchain's `repository_dispatch`) normalizes the version, refuses a downgrade, runs `make stamp-committed-versions` on main, and opens a bump PR from a `release/v<ver>` branch. A burst of releases is serialized (`concurrency`), and an unmerged PR is auto-superseded by a newer one (latest wins) — the older PR is closed and its branch deleted.
+2. **A maintainer merges the PR** — this is the release approval. Because the bump lands via a PR, `main` can be branch-protected; no bot pushes directly to it.
+3. **`_consume-release.yml`** (on `push` to main touching the manifests) reads the now-committed version and publishes every channel. It is idempotent: on a push it skips a version already on npm (the cutover, or a stray manifest edit); a manual `workflow_dispatch` always runs, so a partially-failed release can be re-driven.
+
+The cost is a small, safe window: between merge and publish completion, `main` names a version the registries don't have *yet* (a plugin update in that window hits an npm 404). It closes when the publish finishes; a publish failure holds it open until re-driven, so publish failures must be watched.
+
+The split between `stamp-committed-versions` (version fields — committed) and the fuller `stamp-versions` (adds the build-only `file:` tarball deps + composed descriptions — ephemeral, never committed) is what keeps the bump PR safe: it can only ever touch version numbers, never a build artifact path. The MCP launch line in marketplace.json is pinned to the release version by the same target, so the `twf` MCP binary and the plugin's skills always move in lockstep (issue #2).
 
 ### C6. Phase-based reusable workflows
 
