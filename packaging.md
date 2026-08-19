@@ -75,8 +75,13 @@ release.yml (release-cutter + library publisher)
   +-- dispatch-dist            repository_dispatch {version} -> dist repo (DIST_DISPATCH_TOKEN)
         |
         v
-[dist repo]  _consume-release.yml (on repository_dispatch: toolchain-release)
-  +-- download all Release assets; stamp manifests to vX.Y.Z; _check-versions
+[dist repo]  prepare-release.yml (on repository_dispatch: toolchain-release)
+  +-- stamp committed manifests to vX.Y.Z on a release/vX.Y.Z branch
+  +-- open a human-gated bump PR (supersede any older open release PR)
+        |
+        v  (a maintainer merges the PR — the release approval)
+[dist repo]  _consume-release.yml (on push: main, manifest paths)
+  +-- read committed version; skip if already on npm; _check-versions
   +-- _publish-vsix             VS Code Marketplace + Open VSX (builds webview from visualizer lib)
   +-- _publish-npm-twf          @temporal-architect/twf + 5 platform sub-packages
   +-- _publish-npm-claude-plugin @temporal-architect/claude-plugin
@@ -141,13 +146,13 @@ Generalizes to wrapper + sub-package shapes (e.g. `@temporal-architect/twf`).
 
 ### C3. Inline sed for version bumping
 
-`Makefile`'s `release:` target uses `sed -i.bak` per manifest. Each new manifest gets one more `sed` line. Pattern:
+`Makefile`'s `stamp-committed-versions` target uses `sed -i.bak` per manifest. Each new manifest gets one more `sed` line. Pattern:
 
 ```makefile
-@sed -i.bak 's/"version": *"[^"]*"/"version": "$(NEW_VERSION)"/' <file> && rm -f <file>.bak
+@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' <file> && rm -f <file>.bak
 ```
 
-`.claude-plugin/marketplace.json` carries `version` strings inline (the plugin entry uses Claude Code's `strict: false` mode and declares the plugin definition directly). The `release:` target's `sed -g` flag updates every `"version"` key in the file in lockstep.
+`.claude-plugin/marketplace.json` carries `version` strings inline (the plugin entry uses Claude Code's `strict: false` mode and declares the plugin definition directly). The marketplace `sed` uses the `/g` flag to update every `"version"` key in the file in lockstep, and a second `sed` pins the MCP launch line to the same version.
 
 ### C4. Verb-noun Makefile naming
 
@@ -160,7 +165,17 @@ Targets follow `<verb>-<thing>[-<variant>]`:
 
 ### C5. Manifest version validation
 
-`_check-versions.yml` asserts the git tag matches every checked-in manifest's version. Each manifest gets one `check_node` or `check_pyproject` call. Inline bash; no extracted Go validator.
+`_check-versions.yml` stamps the release version into every manifest (`make stamp-versions`) in a throwaway checkout, then asserts it took (`make check-versions`) as a pre-flight gate — one `check_node`/`check_pyproject` call per manifest, inline bash, no extracted Go validator. This gate only proves stamping is structurally sound; it does not change main.
+
+**The committed versions on main are made honest through a human-gated PR.** Every publish job builds from an ephemeral stamped checkout, so main's *committed* manifests never move on their own and drift stale — deceptive to anyone reading the repo, and actively wrong for `.claude-plugin/marketplace.json`, the one manifest Claude Code reads straight from git (main) rather than a registry (so its committed pin *is* what consumers install; drift there strands them on stale skills — issue #11). The flow inverts to make main the source of truth:
+
+1. **`prepare-release.yml`** (on the toolchain's `repository_dispatch`) normalizes the version, refuses a downgrade, runs `make stamp-committed-versions` on main, and opens a bump PR from a `release/v<ver>` branch. A burst of releases is serialized (`concurrency`), and an unmerged PR is auto-superseded by a newer one (latest wins) — the older PR is closed and its branch deleted.
+2. **A maintainer merges the PR** — this is the release approval. Because the bump lands via a PR, `main` can be branch-protected; no bot pushes directly to it.
+3. **`_consume-release.yml`** (on `push` to main touching the manifests) reads the now-committed version and publishes every channel. It is idempotent: on a push it skips a version already on npm (the cutover, or a stray manifest edit); a manual `workflow_dispatch` always runs, so a partially-failed release can be re-driven.
+
+The cost is a small, safe window: between merge and publish completion, `main` names a version the registries don't have *yet* (a plugin update in that window hits an npm 404). It closes when the publish finishes; a publish failure holds it open until re-driven, so publish failures must be watched.
+
+The split between `stamp-committed-versions` (version fields — committed) and the fuller `stamp-versions` (adds the build-only `file:` tarball deps + composed descriptions — ephemeral, never committed) is what keeps the bump PR safe: it can only ever touch version numbers, never a build artifact path. The MCP launch line in marketplace.json is pinned to the release version by the same target, so the `twf` MCP binary and the plugin's skills always move in lockstep (issue #2).
 
 ### C6. Phase-based reusable workflows
 

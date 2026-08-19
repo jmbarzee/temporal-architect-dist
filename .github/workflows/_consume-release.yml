@@ -1,22 +1,44 @@
-name: Consume Release
+name: Publish Release
 
-# Entry point. Fired by the toolchain repo (jmbarzee/temporal-architect) via
-# repository_dispatch after it cuts a GitHub Release. The payload carries the
-# version; this repo downloads that Release's assets, stamps the version into
-# every manifest, repackages, and publishes to every registry in lockstep.
+# Publishes every consumption channel at the version committed in the manifests.
 #
-# Manual re-run: use the "Run workflow" button (workflow_dispatch) with a
+# Trigger: a push to main that touches the manifests — i.e. the merge of a
+# release/v* bump PR opened by prepare-release.yml. That merge IS the release
+# approval; this workflow reads the now-committed version and fans out to every
+# registry. (prepare-release.yml handles the toolchain's repository_dispatch and
+# the human gate — see packaging.md C5.)
+#
+# Idempotent on push: if the committed version is already on npm (the cutover to
+# this flow, or a stray manifest edit), the publish cleanly no-ops. A manual
+# workflow_dispatch always runs, so a partially-failed release can be re-driven.
+#
+# Manual re-run: "Run workflow" (workflow_dispatch), optionally overriding the
 # version, e.g. to re-publish a channel that failed.
+#
+# NOTE: the filename _consume-release.yml is load-bearing — npm trusted
+# publishing (OIDC) validates the top-level caller workflow filename, configured
+# on npmjs.com for every @temporal-architect/* package published here. Do NOT
+# rename it without updating the npm trusted-publisher config first.
 
 on:
-  repository_dispatch:
-    types: [toolchain-release]
+  push:
+    branches: [main]
+    paths:
+      - ".claude-plugin/marketplace.json"
+      - "packages/vscode/package.json"
+      - "packages/npm/**/package.json"
+      - "packages/pypi/twf-cli/pyproject.toml"
+      - "packages/pypi/twf-cli/src/twf_cli/__init__.py"
   workflow_dispatch:
     inputs:
       version:
-        description: "Toolchain release version to consume, e.g. v0.3.2"
-        required: true
+        description: "Version to publish (defaults to the committed manifest version)"
+        required: false
         type: string
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -27,16 +49,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
     steps:
+      - uses: actions/checkout@v4
       - id: v
         run: |
-          V="${{ github.event.client_payload.version || inputs.version }}"
-          if [ -z "$V" ]; then echo "No version in dispatch payload or input"; exit 1; fi
+          set -euo pipefail
+          V="${{ github.event.inputs.version }}"
+          if [ -z "$V" ]; then
+            V=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+          fi
+          V="${V#v}"
+          [ -n "$V" ] && [ "$V" != "null" ] || { echo "::error::could not resolve version"; exit 1; }
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Consuming toolchain release $V"
+
+          # On an automatic push, don't re-publish a version that already exists
+          # on npm (the cutover to this flow, or a stray manifest edit) — skip the
+          # whole fan-out. A manual dispatch always publishes, so a partially
+          # failed release can be re-driven.
+          publish=true
+          if [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
+            echo "v$V is already published to npm — nothing to do."
+            publish=false
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Resolved v$V (publish=$publish)"
 
   check-versions:
     needs: resolve-version
+    if: needs.resolve-version.outputs.publish == 'true'
     uses: ./.github/workflows/_check-versions.yml
     with:
       version: ${{ needs.resolve-version.outputs.version }}
