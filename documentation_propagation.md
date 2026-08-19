@@ -25,7 +25,7 @@ channel blurb is the only piece that lives here in **dist**.
 
 | # | Component | What it pitches | Canonical source (toolchain) | Images? | Shipped as |
 |---|-----------|-----------------|------------------------------|---------|-----------|
-| 1 | **Global vision** | Devs working at *architecture* level: a parseable, validated, visual model of a whole Temporal system | root `README.md` tagline + "Why" (no dedicated fragment yet) | maybe (hero graph) | — (prose only) |
+| 1 | **Global vision** | Devs working at *architecture* level: a parseable, validated, visual model of a whole Temporal system | `docs/fragments/global.md` (dedicated fragment; `description:` front-matter is the canonical one-liner) | yes (hero graph) | `{{fragment:global}}` in every channel header |
 | 2 | **Parser / `twf` binary** | CLI: `check`/`parse`/`symbols`/`graph`/`lsp`; embedded spec | `tools/lsp/cmd/twf/README.md`, `COMMANDS.md`, `root.go` | no | binary archives, npm `twf`, PyPI, Homebrew, `go install`, VSIX |
 | 2a | **MCP server** (`twf mcp`) | Agent entry point: parser tools + spec resources over stdio | `…/internal/command/mcp/mcp.go` (Long + instructions) | no | **subcommand of the binary** (no separate artifact) |
 | 3 | **Sampler** | Recover a deployment graph from sampled production history (emits `observed-graph.json`, opened directly in the visualizer) | `tools/sampler/README.md`, `main.go` | maybe (drift overlay) | **nowhere** — `go install` from source only |
@@ -66,10 +66,24 @@ limitations in view.
 
 - **The sampler is published nowhere** — real capability, source-install only, so it appears in no
   listing. Also the one genuine multi-binary decision. [#7](https://github.com/jmbarzee/temporal-architect-dist/issues/7)
-- **Visualizer: one product, two delivery forms, no images** — the npm library and the VSIX webview
-  carry separate hand-written copy, and images are absent. [#8](https://github.com/jmbarzee/temporal-architect-dist/issues/8)
-- **The global vision pitch is duplicated and divergent** across the root README, the VSIX page, and
-  the npm/PyPI READMEs. The central driver of the SSOT effort. [#9](https://github.com/jmbarzee/temporal-architect-dist/issues/9)
+- **Visualizer: one product, two delivery forms, images.** [#8](https://github.com/jmbarzee/temporal-architect-dist/issues/8)
+  *Dist side done:* the VSIX header (`docs/templates/vscode.md`) sources the one canonical pitch via
+  `{{fragment:visualizer}}` (the toolchain's `FRAGMENT.md`), and images now render — as of toolchain
+  **v0.11.0** the PNGs are committed under `docs/images/` and referenced from `global.md`/`FRAGMENT.md`;
+  `render.mjs` rewrites those refs to release-pinned `raw.githubusercontent.com/.../v<version>/...` URLs
+  (verified 200 on npm/PyPI/Marketplace-renderable absolute URLs). *Toolchain residual:* the published
+  npm `@temporal-architect/visualizer` `README.md` is still a separate hand-written developer README
+  that neither embeds the canonical `FRAGMENT.md` pitch nor shows the images — closing #8 needs that
+  package (toolchain-owned, published from the toolchain repo) to compose from the same fragment.
+- **The global vision pitch is single-sourced.** [#9](https://github.com/jmbarzee/temporal-architect-dist/issues/9)
+  *Dist side done:* every dist channel header (`vscode`, `npm-twf`, `pypi`, `claude-plugin`) embeds
+  `{{fragment:global}}`, so the long pitch has one source; short `description` fields are stamped from
+  `docs/descriptions.json` by `stamp-descriptions.mjs` (the `@global` sentinel inherits the fragment's
+  canonical one-liner; the current values are deliberate channel-specific overrides, not drift). No
+  hand-written copy of the pitch remains in the dist tree. *Toolchain residual:* the toolchain's own
+  root `README.md` still carries the pitch inline rather than composing from `global.md`; that dedup is
+  toolchain-owned. (The dist repo's root `README.md` is the storefront's build/how-it-works doc, not a
+  product-pitch surface, so it is intentionally not composed from the fragment.)
 - **MCP is bundled-only** — every MCP user receives the whole binary and invokes one subcommand.
   That is fine, but it makes a Smithery listing the first MCP-only pitch. [#6](https://github.com/jmbarzee/temporal-architect-dist/issues/6). Skills are
   still not exposed over MCP (the binary does not embed them — toolchain [#77](https://github.com/jmbarzee/temporal-architect/issues/77)); that copy
