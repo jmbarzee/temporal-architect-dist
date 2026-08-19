@@ -25,6 +25,12 @@ jobs:
         with:
           python-version: "3.x"
       - name: Stamp manifests to the release version
+        # Ephemeral pre-flight: stamps this throwaway checkout and asserts every
+        # manifest took the release version, catching a structural regression
+        # before any channel publishes. main's committed manifests are made
+        # authoritative separately, by the commit-manifests job in
+        # _consume-release.yml (which pushes the stamped versions back to main
+        # after every channel publishes) — so no committed pin is ever stale (#11).
         run: make stamp-versions VERSION=${{ inputs.version }}
       - name: Verify every manifest matches
         run: make check-versions VERSION=${{ inputs.version }}

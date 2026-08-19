@@ -142,7 +142,11 @@ Targets follow `<verb>-<thing>[-<variant>]`:
 
 ### C5. Manifest version validation
 
-`_check-versions.yml` asserts the git tag matches every checked-in manifest's version. Each manifest gets one `check_node` or `check_pyproject` call. Inline bash; no extracted Go validator.
+`_check-versions.yml` stamps the release version into every manifest (`make stamp-versions`) in a throwaway checkout, then asserts it took (`make check-versions`) as a pre-flight gate — one `check_node`/`check_pyproject` call per manifest, inline bash, no extracted Go validator. This gate only proves stamping is structurally sound; it does not change main.
+
+**The committed versions on main are made honest automatically.** Every publish job builds from an ephemeral stamped checkout, so main's *committed* manifests never move on their own and drift stale — deceptive to anyone reading the repo, and actively wrong for `.claude-plugin/marketplace.json`, the one manifest Claude Code reads straight from git (main) rather than a registry (so its committed pin *is* what consumers install; drift there strands them on stale skills — issue #11). The `commit-manifests` job in `_consume-release.yml` closes this: gated on **all** publishes succeeding, it runs `make stamp-committed-versions` on main and pushes the result back, so every committed version equals the just-published one. It is idempotent (a re-run whose main is already current makes no commit) and needs no human bump — the old discipline of hand-committing a `release: vX.Y.Z` bump is gone.
+
+The split between `stamp-committed-versions` (version fields — committed) and the fuller `stamp-versions` (adds the build-only `file:` tarball deps + composed descriptions — ephemeral, never committed) is what makes the commit-back safe: it can only ever touch version numbers, never a build artifact path. The MCP launch line in marketplace.json is pinned to the release version by the same target, so the `twf` MCP binary and the plugin's skills always move in lockstep (issue #2).
 
 ### C6. Phase-based reusable workflows
 

@@ -46,7 +46,7 @@ require-version:
 
 # ── Fetch + stamp ────────────────────────────────────────────────────────────
 
-.PHONY: fetch-release stamp-versions check-versions
+.PHONY: fetch-release stamp-committed-versions stamp-versions check-versions
 
 ## Download every asset of the toolchain's GitHub Release v<VER> into dist-assets/.
 ## Needs `gh` authenticated (GITHUB_TOKEN in CI).
@@ -55,15 +55,17 @@ fetch-release: require-version
 	gh release download v$(VER) -R $(SRC_REPO) -D $(ASSETS) --clobber
 	@echo "Fetched release v$(VER) assets into $(ASSETS)/"
 
-## Stamp the incoming version into every dist manifest (build-time lockstep —
-## dist never tags; the version is the one carried in the dispatch payload).
-stamp-versions: require-version
+## Stamp the incoming version into every *committed* manifest — the subset of
+## edits whose result belongs in git and is the real, published version. This is
+## the source of truth for the release's commit-manifests job, which runs this
+## target on main and pushes the result back so no committed version is ever
+## stale or cosmetic: marketplace.json is read from git by Claude Code, and the
+## rest are kept honest for anyone reading the repo (issues #2, #11). Deliberately
+## excludes the build-only rewrites (the file: tarball deps) and the composed
+## descriptions (they need staged Release assets) — those are ephemeral to a CI
+## checkout and must NEVER be committed; they live in stamp-versions below.
+stamp-committed-versions: require-version
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
-	@# Extension builds against the wire-types tarball downloaded from the toolchain
-	@# Release (make fetch-release), NOT the npm registry — this keeps the VSIX build
-	@# independent of the wire-types npm publish (same way the webview bundle is staged
-	@# from a Release asset). The file: path is relative to the extension package.json.
-	@sed -i.bak 's|\("@temporal-architect/wire-types": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-wire-types-$(VER).tgz"|' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/npm/twf/package.json && rm -f packages/npm/twf/package.json.bak
 	@for p in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do \
 		sed -i.bak "s|\"@temporal-architect/twf-$$p\": *\"[^\"]*\"|\"@temporal-architect/twf-$$p\": \"$(VER)\"|" packages/npm/twf/package.json && rm -f packages/npm/twf/package.json.bak; \
@@ -73,6 +75,26 @@ stamp-versions: require-version
 	@sed -i.bak 's/^__version__ = "[^"]*"$$/__version__ = "$(VER)"/' packages/pypi/twf-cli/src/twf_cli/__init__.py && rm -f packages/pypi/twf-cli/src/twf_cli/__init__.py.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/npm/claude-plugin/package.json && rm -f packages/npm/claude-plugin/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/g' .claude-plugin/marketplace.json && rm -f .claude-plugin/marketplace.json.bak
+	@# Pin the plugin's MCP launch line to this version so the twf MCP binary and
+	@# the plugin's skills always move together — no npm-latest binary running
+	@# against stamped skills (issue #2). The pattern matches the bare
+	@# "@temporal-architect/twf" or a prior "…twf@x.y.z" pin, never the
+	@# "…twf-<platform>" subpackages (which are followed by '-', not '@' or '"').
+	@sed -i.bak 's|"@temporal-architect/twf\(@[^"]*\)\{0,1\}"|"@temporal-architect/twf@$(VER)"|g' .claude-plugin/marketplace.json && rm -f .claude-plugin/marketplace.json.bak
+	@echo "Stamped committed version fields to $(VER)"
+
+## Stamp everything a release build needs: the committed version fields (above)
+## plus the build-only rewrites — the extension's wire-types dep repointed at the
+## downloaded tarball, and each channel's composed description. Those extra edits
+## point at dist-assets/ that only exists in a release checkout, so they are
+## ephemeral and must never be committed (that is why commit-manifests runs
+## stamp-committed-versions, not this target).
+stamp-versions: require-version stamp-committed-versions
+	@# Extension builds against the wire-types tarball downloaded from the toolchain
+	@# Release (make fetch-release), NOT the npm registry — this keeps the VSIX build
+	@# independent of the wire-types npm publish (same way the webview bundle is staged
+	@# from a Release asset). The file: path is relative to the extension package.json.
+	@sed -i.bak 's|\("@temporal-architect/wire-types": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-wire-types-$(VER).tgz"|' $(EXT_DIR)/package.json && rm -f $(EXT_DIR)/package.json.bak
 	@# Descriptions are composable too: stamp each channel's `description` from the
 	@# single source (docs/descriptions.json; "@global" inherits the toolchain
 	@# fragment). Homebrew's desc is passed to bump-brew by publish-brew instead.
@@ -89,6 +111,8 @@ check-versions: require-version
 	for p in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do check_node "npm $$p" "packages/npm/twf-$$p/package.json"; done; \
 	check_node "claude plugin" "packages/npm/claude-plugin/package.json"; \
 	py=$$(python3 -c "import tomllib;print(tomllib.load(open('packages/pypi/twf-cli/pyproject.toml','rb'))['project']['version'])"); echo "  pypi: $$py"; [ "$$py" = "$(VER)" ] || { echo "::error::pyproject = $$py != $(VER)"; fail=1; }; \
+	mp=$$(node -p "require('./.claude-plugin/marketplace.json').plugins[0].version"); echo "  marketplace: $$mp"; [ "$$mp" = "$(VER)" ] || { echo "::error::.claude-plugin/marketplace.json = $$mp != $(VER)"; fail=1; }; \
+	mcp=$$(node -p "require('./.claude-plugin/marketplace.json').plugins[0].mcpServers.twf.args.find(a => a.indexOf('@temporal-architect/twf@') === 0)"); echo "  marketplace mcp pin: $$mcp"; [ "$$mcp" = "@temporal-architect/twf@$(VER)" ] || { echo "::error::marketplace.json MCP args pin = $$mcp != @temporal-architect/twf@$(VER)"; fail=1; }; \
 	exit $$fail
 
 # ── Stage downloaded assets into package trees ───────────────────────────────
