@@ -123,13 +123,13 @@ Generalizes to wrapper + sub-package shapes (e.g. `@temporal-architect/twf`).
 
 ### C3. Inline sed for version bumping
 
-`Makefile`'s `release:` target uses `sed -i.bak` per manifest. Each new manifest gets one more `sed` line. Pattern:
+`Makefile`'s `stamp-committed-versions` target uses `sed -i.bak` per manifest. Each new manifest gets one more `sed` line. Pattern:
 
 ```makefile
-@sed -i.bak 's/"version": *"[^"]*"/"version": "$(NEW_VERSION)"/' <file> && rm -f <file>.bak
+@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' <file> && rm -f <file>.bak
 ```
 
-`.claude-plugin/marketplace.json` carries `version` strings inline (the plugin entry uses Claude Code's `strict: false` mode and declares the plugin definition directly). The `release:` target's `sed -g` flag updates every `"version"` key in the file in lockstep.
+`.claude-plugin/marketplace.json` carries `version` strings inline (the plugin entry uses Claude Code's `strict: false` mode and declares the plugin definition directly). The marketplace `sed` uses the `/g` flag to update every `"version"` key in the file in lockstep, and a second `sed` pins the MCP launch line to the same version.
 
 ### C4. Verb-noun Makefile naming
 
