@@ -89,6 +89,24 @@ libraries via OIDC trusted publishing (no token; `id-token: write`). All other r
 secrets live in dist. The visualizer + wire-types tarballs are still attached to the
 Release so dist consumes them at build time (VSIX types + webview) without an npm round-trip.
 
+### Operating the pipeline
+
+**Version stamping.** This repo never tags independently — the version is the one carried in the
+toolchain dispatch payload. `make stamp-versions VERSION=X.Y.Z` writes it into every manifest at
+build time; `make check-versions VERSION=X.Y.Z` asserts it took.
+
+**Manual re-run.** Use the **Run workflow** button on *Consume Release* (`_consume-release.yml`,
+`workflow_dispatch`) with a version (e.g. `v0.3.2`) to re-publish — useful if a single channel failed.
+
+**Registry identifiers** (unchanged by the repo split): npm scope `@temporal-architect`, PyPI project
+`twf-cli`, VSIX id `jmbarzee.twf-syntax`. Manifests set `homepage` → the toolchain repo (the front
+door) and `repository` → this repo (where each package's packaging source lives).
+
+**Landing page.** The repo-root `README.md` is the user-facing storefront, composed by `make
+render-docs` from `docs/templates/root.md` + the shared `{{fragment:global}}` pitch (the same single
+source the channel READMEs use). Unlike the gitignored package READMEs it stays **committed** so GitHub
+renders it; re-render and commit it when the shared pitch changes.
+
 ---
 
 ## Conventions
