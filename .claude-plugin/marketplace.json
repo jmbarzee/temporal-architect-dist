@@ -18,6 +18,8 @@
       "keywords": ["temporal", "workflow", "twf", "architecture", "system design", "mcp", "lsp"],
       "category": "languages",
       "skills": ["./skills"],
+      "agents": ["./agents/project-discovery.md", "./agents/slice-mapper.md"],
+      "hooks": "./hooks/hooks.json",
       "mcpServers": {
         "twf": {
           "command": "npx",
