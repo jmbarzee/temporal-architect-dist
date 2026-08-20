@@ -314,11 +314,26 @@ publish-pypi:
 
 # ── Claude Code plugin ───────────────────────────────────────────────────────
 
-.PHONY: build-claude-plugin publish-npm-claude-plugin
+.PHONY: build-claude-plugin publish-npm-claude-plugin stage-agents
 
-## Stage skills into the claude-plugin package (from the downloaded skills tarball)
-## and compose its README from the doc fragments.
-build-claude-plugin: stage-skills render-docs
+## Stage the plugin's `agents/` payload from the canonical subagent definitions
+## that ship inside the skills tarball — single-sourced in the toolchain repo
+## (temporal-architect#140), so the plugin agents never drift from the reference
+## docs. Runs after stage-skills, which extracts the skills tree this reads from.
+stage-agents: stage-skills
+	@mkdir -p packages/npm/claude-plugin/agents
+	@rm -f packages/npm/claude-plugin/agents/*.md
+	@src=packages/npm/claude-plugin/skills/temporal-architect-design/subagents; \
+	if [ ! -d "$$src" ]; then \
+		echo "Error: $$src not found — the staged skills tarball has no subagents/ (needs a toolchain release >= v0.12.0, which ships temporal-architect#140)"; \
+		exit 1; \
+	fi; \
+	cp "$$src"/project-discovery.md "$$src"/slice-mapper.md packages/npm/claude-plugin/agents/
+	@echo "Staged claude-plugin agents"
+
+## Stage skills + agents into the claude-plugin package (from the downloaded
+## skills tarball) and compose its README from the doc fragments.
+build-claude-plugin: stage-skills stage-agents render-docs
 
 ## Publish @temporal-architect/claude-plugin to npm.
 ## (The reusable workflow publishes inline with --provenance; kept in sync here.)

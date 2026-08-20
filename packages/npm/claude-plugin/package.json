@@ -24,6 +24,9 @@
   ],
   "files": [
     "skills",
+    "agents",
+    "commands",
+    "hooks",
     "README.md",
     "LICENSE"
   ],

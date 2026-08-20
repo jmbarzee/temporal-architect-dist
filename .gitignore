@@ -13,6 +13,9 @@ packages/vscode/skills/
 
 # Claude Code plugin payload — staged from the downloaded skills tarball
 packages/npm/claude-plugin/skills/
+# Plugin agents/ — hoisted at build (make stage-agents) from the skills tarball's
+# canonical subagent files, single-sourced in the toolchain repo. Never committed.
+packages/npm/claude-plugin/agents/
 
 # Composed package READMEs — generated build output (render-docs). Canonical
 # source is the toolchain doc fragments + docs/templates/ here. Never hand-edit.
