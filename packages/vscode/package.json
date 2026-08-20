@@ -2,7 +2,7 @@
   "name": "twf-syntax",
   "displayName": "Temporal Architect",
   "description": "Design, visualize, and implement entire Temporal systems in `.twf` — namespaces, workers, workflows, and Nexus — with a deterministic language server and an interactive architecture visualizer. Covers activities, child workflows, signals, queries, updates, timers, promises, and Nexus.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "jmbarzee",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
