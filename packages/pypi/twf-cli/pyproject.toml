@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "twf-cli"
-version = "0.12.0"
+version = "0.13.0"
 description = "Toolchain for designing and validating entire Temporal systems in .twf — CLI, language server, and MCP server."
 readme = "README.md"
 license = { text = "MIT" }
