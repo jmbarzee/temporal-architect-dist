@@ -4,5 +4,6 @@
   "npm-twf": "Toolchain for designing and validating entire Temporal systems in `.twf` — CLI, language server, and MCP server.",
   "pypi": "Toolchain for designing and validating entire Temporal systems in .twf — CLI, language server, and MCP server.",
   "claude-plugin": "Claude Code plugin payload for temporal-architect — the `.twf` architecture toolchain for designing, validating, and implementing entire Temporal systems (design, Go-authoring, and infra-provisioning skills, plus the twf MCP server).",
-  "homebrew": "Toolchain for designing and validating entire Temporal systems in .twf"
+  "homebrew": "Toolchain for designing and validating entire Temporal systems in .twf",
+  "homebrew-serve": "Live temporal-architect visualizer over local HTTP — hosts the .twf design graph and live-reloads on change"
 }

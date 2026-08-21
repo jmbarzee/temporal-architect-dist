@@ -138,3 +138,17 @@ jobs:
       version: ${{ needs.resolve-version.outputs.version }}
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # twf-serve is the only channel BUILT here (dist-owned Go source, not a
+  # toolchain binary). This cross-compiles it, publishes a dist GitHub Release
+  # with the archives (whose tag also backs `go install …/twf-serve@vX`), and
+  # bumps Formula/twf-serve.rb. Independent of the npm/pypi/vsix fan-out.
+  publish-twf-serve:
+    needs: [resolve-version, check-versions]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/_release-twf-serve.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

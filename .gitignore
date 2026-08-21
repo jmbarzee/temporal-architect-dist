@@ -41,3 +41,11 @@ packages/pypi/twf-cli/src/twf_cli/_binary/
 
 # bump-brew compiled binary
 internal/release/bump-brew/bump-brew
+
+# twf-serve cross-compile output (archives + per-platform binaries) and the
+# stray binary a bare `go build` drops at the module root. The embedded UI bundle
+# at packages/twf-serve/ui/index.html is DELIBERATELY tracked (go install must
+# have an asset to embed) — only the compiled binaries here are build artifacts.
+packages/twf-serve/dist/
+packages/twf-serve/twf-serve
+packages/twf-serve/twf-serve.exe

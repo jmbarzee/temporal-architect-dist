@@ -56,7 +56,7 @@ var Platforms = []Platform{
 
 // formulaTemplate renders Formula/twf.rb. The template uses Go's text/template
 // syntax. SHA values come from per-platform archive downloads.
-const formulaTemplate = `class Twf < Formula
+const formulaTemplate = `class {{.Class}} < Formula
   desc "{{.Desc}}"
   homepage "https://github.com/{{.SourceRepo}}"
   version "{{.Version}}"
@@ -64,32 +64,32 @@ const formulaTemplate = `class Twf < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/twf-v{{.Version}}-darwin-arm64.tar.gz"
+      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/{{.ArchivePrefix}}-v{{.Version}}-darwin-arm64.tar.gz"
       sha256 "{{index .SHAs "darwin-arm64"}}"
     end
     on_intel do
-      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/twf-v{{.Version}}-darwin-amd64.tar.gz"
+      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/{{.ArchivePrefix}}-v{{.Version}}-darwin-amd64.tar.gz"
       sha256 "{{index .SHAs "darwin-amd64"}}"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/twf-v{{.Version}}-linux-arm64.tar.gz"
+      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/{{.ArchivePrefix}}-v{{.Version}}-linux-arm64.tar.gz"
       sha256 "{{index .SHAs "linux-arm64"}}"
     end
     on_intel do
-      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/twf-v{{.Version}}-linux-amd64.tar.gz"
+      url "https://github.com/{{.SourceRepo}}/releases/download/v{{.Version}}/{{.ArchivePrefix}}-v{{.Version}}-linux-amd64.tar.gz"
       sha256 "{{index .SHAs "linux-amd64"}}"
     end
   end
 
   def install
-    bin.install "twf"
+    bin.install "{{.Binary}}"
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/twf --version")
+    assert_match version.to_s, shell_output("#{bin}/{{.Binary}} --version")
   end
 end
 `
@@ -102,16 +102,30 @@ const DefaultDesc = "Toolchain for designing and validating entire Temporal syst
 
 // FormulaData feeds the template.
 type FormulaData struct {
-	Version    string            // semver without leading "v"
-	SourceRepo string            // e.g. "jmbarzee/temporal-architect"
-	Desc       string            // Homebrew one-liner (from docs/descriptions.json)
-	SHAs       map[string]string // platform key (e.g. "darwin-arm64") → sha256 hex
+	Version       string            // semver without leading "v"
+	SourceRepo    string            // e.g. "jmbarzee/temporal-architect"
+	Desc          string            // Homebrew one-liner (from docs/descriptions.json)
+	SHAs          map[string]string // platform key (e.g. "darwin-arm64") → sha256 hex
+	Class         string            // Ruby class name, e.g. "Twf" / "TwfServe" (default "Twf")
+	Binary        string            // installed binary name, e.g. "twf" / "twf-serve" (default "twf")
+	ArchivePrefix string            // release archive prefix, e.g. "twf" / "twf-serve" (default "twf")
 }
 
 // renderFormula produces the Ruby formula text. Pure function; no IO.
 func renderFormula(data FormulaData) (string, error) {
 	if strings.TrimSpace(data.Desc) == "" {
 		data.Desc = DefaultDesc
+	}
+	// Default to the twf formula so existing callers (and tests) that omit the
+	// name fields keep rendering Formula/twf.rb byte-for-byte.
+	if data.Class == "" {
+		data.Class = "Twf"
+	}
+	if data.Binary == "" {
+		data.Binary = "twf"
+	}
+	if data.ArchivePrefix == "" {
+		data.ArchivePrefix = "twf"
 	}
 	for _, p := range Platforms {
 		if _, ok := data.SHAs[p.String()]; !ok {
@@ -129,12 +143,12 @@ func renderFormula(data FormulaData) (string, error) {
 	return buf.String(), nil
 }
 
-// archiveURL builds the GitHub Release download URL for one platform's
-// twf archive.
-func archiveURL(sourceRepo, version string, p Platform) string {
+// archiveURL builds the GitHub Release download URL for one platform's archive.
+// archivePrefix is the release-asset name stem ("twf" or "twf-serve").
+func archiveURL(sourceRepo, archivePrefix, version string, p Platform) string {
 	return fmt.Sprintf(
-		"https://github.com/%s/releases/download/v%s/twf-v%s-%s-%s.tar.gz",
-		sourceRepo, version, version, p.OS, p.Arch,
+		"https://github.com/%s/releases/download/v%s/%s-v%s-%s-%s.tar.gz",
+		sourceRepo, version, archivePrefix, version, p.OS, p.Arch,
 	)
 }
 
@@ -162,10 +176,10 @@ func downloadSHA256(httpc *http.Client, url string) (string, error) {
 
 // computeSHAs downloads each platform archive in series and returns a map
 // keyed by Platform.String().
-func computeSHAs(httpc *http.Client, sourceRepo, version string) (map[string]string, error) {
+func computeSHAs(httpc *http.Client, sourceRepo, archivePrefix, version string) (map[string]string, error) {
 	shas := make(map[string]string, len(Platforms))
 	for _, p := range Platforms {
-		url := archiveURL(sourceRepo, version, p)
+		url := archiveURL(sourceRepo, archivePrefix, version, p)
 		fmt.Fprintf(os.Stderr, "hashing %s\n", url)
 		sum, err := downloadSHA256(httpc, url)
 		if err != nil {
@@ -253,6 +267,7 @@ func putFormula(httpc *http.Client, token, tapRepo, path, content, message, exis
 func main() {
 	var (
 		versionFlag string
+		name        string
 		tap         string
 		source      string
 		token       string
@@ -261,8 +276,9 @@ func main() {
 		dryRun      bool
 	)
 	flag.StringVar(&versionFlag, "version", "", "Release version, e.g. 'v0.3.2' (with or without leading v).")
+	flag.StringVar(&name, "name", "twf", "Formula + binary name: 'twf' or 'twf-serve'. Sets the class, install/test binary, archive prefix, and Formula/<name>.rb path.")
 	flag.StringVar(&tap, "tap", "jmbarzee/homebrew-twf", "Homebrew tap repo to update.")
-	flag.StringVar(&source, "source", "jmbarzee/temporal-architect", "Source repo whose GitHub Release we're pinning to.")
+	flag.StringVar(&source, "source", "jmbarzee/temporal-architect", "Source repo whose GitHub Release we're pinning to (twf: the toolchain; twf-serve: this dist repo, which builds + releases the binary).")
 	flag.StringVar(&token, "token", os.Getenv("GITHUB_TOKEN"), "GitHub token with write access to the tap repo (defaults to $GITHUB_TOKEN).")
 	flag.StringVar(&out, "out", "", "If set, write formula to this file instead of pushing to the tap.")
 	flag.StringVar(&desc, "desc", DefaultDesc, "Homebrew formula `desc` one-liner (sourced from docs/descriptions.json by publish-brew).")
@@ -272,6 +288,9 @@ func main() {
 	if versionFlag == "" {
 		exit("required: -version")
 	}
+	if name == "" {
+		exit("required: -name (non-empty)")
+	}
 	version := strings.TrimPrefix(versionFlag, "v")
 	if strings.TrimSpace(desc) == "" {
 		desc = DefaultDesc
@@ -279,16 +298,19 @@ func main() {
 
 	httpc := &http.Client{Timeout: 5 * time.Minute}
 
-	shas, err := computeSHAs(httpc, source, version)
+	shas, err := computeSHAs(httpc, source, name, version)
 	if err != nil {
 		exit("compute SHAs: %v", err)
 	}
 
 	formula, err := renderFormula(FormulaData{
-		Version:    version,
-		SourceRepo: source,
-		Desc:       desc,
-		SHAs:       shas,
+		Version:       version,
+		SourceRepo:    source,
+		Desc:          desc,
+		SHAs:          shas,
+		Class:         pascalCase(name),
+		Binary:        name,
+		ArchivePrefix: name,
 	})
 	if err != nil {
 		exit("render formula: %v", err)
@@ -310,7 +332,7 @@ func main() {
 		if token == "" {
 			exit("required: -token (or $GITHUB_TOKEN) for push to %s", tap)
 		}
-		path := "Formula/twf.rb"
+		path := "Formula/" + name + ".rb"
 		existingSHA, err := getCurrentSHA(httpc, token, tap, path)
 		if err != nil {
 			exit("get current formula: %v", err)
@@ -319,7 +341,7 @@ func main() {
 		if existingSHA == "" {
 			action = "Create"
 		}
-		commitMsg := fmt.Sprintf("twf: %s formula for v%s", strings.ToLower(action), version)
+		commitMsg := fmt.Sprintf("%s: %s formula for v%s", name, strings.ToLower(action), version)
 		if err := putFormula(httpc, token, tap, path, formula, commitMsg, existingSHA); err != nil {
 			exit("push formula: %v", err)
 		}
@@ -330,6 +352,21 @@ func main() {
 func exit(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "bump-brew: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// pascalCase converts a hyphenated formula name into a Homebrew Ruby class name:
+// "twf" → "Twf", "twf-serve" → "TwfServe" (Homebrew strips separators and
+// capitalizes each segment).
+func pascalCase(name string) string {
+	var b strings.Builder
+	for _, seg := range strings.Split(name, "-") {
+		if seg == "" {
+			continue
+		}
+		b.WriteString(strings.ToUpper(seg[:1]))
+		b.WriteString(seg[1:])
+	}
+	return b.String()
 }
 
 // errMissingSHA is returned by renderFormula when a platform SHA is absent.

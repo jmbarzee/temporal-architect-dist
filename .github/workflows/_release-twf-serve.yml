@@ -1,0 +1,78 @@
+name: _release-twf-serve
+
+# Reusable: build, release, and Homebrew-publish the twf-serve binary.
+#
+# twf-serve is the one channel this repo BUILDS rather than repackages: it is
+# dist-owned Go source that imports the toolchain's tools/lsp/pipeline in-process
+# and embeds the serve-ui single-file bundle. So this workflow cross-compiles it
+# for the PLATFORMS matrix, publishes a GitHub Release ON THIS (dist) repo with
+# the archives, and points the Homebrew formula at them. Creating the vX tag here
+# is also what makes `go install .../packages/twf-serve@vX` resolvable.
+#
+# Ordering matters: the Release (with archives) must exist before the brew bump,
+# because bump-brew downloads each archive to hash it. The committed tree this
+# builds from is assumed already version-aligned by prepare-release.yml (serve-ui
+# visualizer pin + tools/lsp go.mod pin + rebuilt bundle ride the bump PR), so a
+# `go install @vX` sees deps + embedded UI that match the release.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version WITHOUT leading 'v', e.g. '0.14.0'."
+        type: string
+        required: true
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        description: "GitHub PAT with `repo` write access on jmbarzee/homebrew-twf."
+        required: true
+
+permissions:
+  contents: write # create the GitHub Release + tag
+
+jobs:
+  release:
+    name: Cross-compile + release twf-serve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/twf-serve/go.mod
+
+      # Build the serve-ui bundle once, then cross-compile + archive twf-serve for
+      # every platform into dist-assets/twf-serve-v<ver>-*.{tar.gz,zip}.
+      - name: Build twf-serve archives
+        run: make twf-serve-archives VERSION=${{ inputs.version }}
+
+      # Publish a GitHub Release on THIS repo carrying the archives. The tag
+      # (v<ver>) also backs `go install .../packages/twf-serve@v<ver>`. Idempotent:
+      # if the release already exists (a re-run), just upload/clobber the assets.
+      - name: Publish dist GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            gh release upload "v$VER" dist-assets/twf-serve-v$VER-* --clobber
+          else
+            gh release create "v$VER" dist-assets/twf-serve-v$VER-* \
+              --title "twf-serve v$VER" \
+              --notes "twf-serve $VER — live temporal-architect visualizer over local HTTP. Built from the toolchain's tools/lsp@v$VER pipeline. Install: \`brew install jmbarzee/twf/twf-serve\` or \`go install github.com/jmbarzee/temporal-architect-dist/packages/twf-serve@v$VER\`."
+          fi
+
+      # Point Formula/twf-serve.rb at the archives just published (downloads each
+      # to hash it, so it must run AFTER the Release exists).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: internal/release/bump-brew/go.mod
+      - name: Bump Homebrew formula (twf-serve)
+        run: make publish-brew-serve VERSION=${{ inputs.version }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
