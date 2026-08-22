@@ -1,9 +1,9 @@
-# twf-serve
+# twf-view
 
 Live [temporal-architect](https://github.com/jmbarzee/temporal-architect) design
 visualizer over a local HTTP server — the visualizer's **second host**.
 
-`twf-serve` parses a set of `.twf` files **in-process** (importing the toolchain's
+`twf-view` parses a set of `.twf` files **in-process** (importing the toolchain's
 `tools/lsp/pipeline` as a library — no subprocess, no version skew), serves the
 shared visualizer app at a loopback URL, watches the files, and pushes re-parsed
 graphs to the browser over Server-Sent Events on every change. Any agent host
@@ -16,19 +16,19 @@ webview.
 Homebrew:
 
 ```bash
-brew install jmbarzee/twf/twf-serve
+brew install jmbarzee/twf/twf-view
 ```
 
 `go install` (Go 1.25+):
 
 ```bash
-go install github.com/jmbarzee/temporal-architect-dist/packages/twf-serve@latest
+go install github.com/jmbarzee/temporal-architect-dist/packages/twf-view@latest
 ```
 
 ## Usage
 
 ```bash
-twf-serve [--port N] [--open] <file...>
+twf-view [--port N] [--open] <file...>
 ```
 
 - `<file...>` — one or more `.twf` files (or directories / globs of them).
@@ -63,10 +63,10 @@ localhost-only tool by design.
 
 ## How it fits
 
-`twf-serve` is built and released by the distribution repo
+`twf-view` is built and released by the distribution repo
 ([temporal-architect-dist](https://github.com/jmbarzee/temporal-architect-dist)),
 not the toolchain: it is dist-owned glue over two toolchain libraries — the Go
 `tools/lsp/pipeline` (parse → graph → decomposition) and the npm
 `@temporal-architect/visualizer` (the `<VisualizerHost>` shell, bundled into the
-single embedded HTML file by `packages/serve-ui`). See
+single embedded HTML file by `packages/twf-view-ui`). See
 [issue #20](https://github.com/jmbarzee/temporal-architect-dist/issues/20).

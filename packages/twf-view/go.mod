@@ -1,4 +1,4 @@
-module github.com/jmbarzee/temporal-architect-dist/packages/twf-serve
+module github.com/jmbarzee/temporal-architect-dist/packages/twf-view
 
 go 1.25.4
 

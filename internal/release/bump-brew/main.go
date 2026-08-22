@@ -106,9 +106,9 @@ type FormulaData struct {
 	SourceRepo    string            // e.g. "jmbarzee/temporal-architect"
 	Desc          string            // Homebrew one-liner (from docs/descriptions.json)
 	SHAs          map[string]string // platform key (e.g. "darwin-arm64") → sha256 hex
-	Class         string            // Ruby class name, e.g. "Twf" / "TwfServe" (default "Twf")
-	Binary        string            // installed binary name, e.g. "twf" / "twf-serve" (default "twf")
-	ArchivePrefix string            // release archive prefix, e.g. "twf" / "twf-serve" (default "twf")
+	Class         string            // Ruby class name, e.g. "Twf" / "TwfView" (default "Twf")
+	Binary        string            // installed binary name, e.g. "twf" / "twf-view" (default "twf")
+	ArchivePrefix string            // release archive prefix, e.g. "twf" / "twf-view" (default "twf")
 }
 
 // renderFormula produces the Ruby formula text. Pure function; no IO.
@@ -144,7 +144,7 @@ func renderFormula(data FormulaData) (string, error) {
 }
 
 // archiveURL builds the GitHub Release download URL for one platform's archive.
-// archivePrefix is the release-asset name stem ("twf" or "twf-serve").
+// archivePrefix is the release-asset name stem ("twf" or "twf-view").
 func archiveURL(sourceRepo, archivePrefix, version string, p Platform) string {
 	return fmt.Sprintf(
 		"https://github.com/%s/releases/download/v%s/%s-v%s-%s-%s.tar.gz",
@@ -276,9 +276,9 @@ func main() {
 		dryRun      bool
 	)
 	flag.StringVar(&versionFlag, "version", "", "Release version, e.g. 'v0.3.2' (with or without leading v).")
-	flag.StringVar(&name, "name", "twf", "Formula + binary name: 'twf' or 'twf-serve'. Sets the class, install/test binary, archive prefix, and Formula/<name>.rb path.")
+	flag.StringVar(&name, "name", "twf", "Formula + binary name: 'twf' or 'twf-view'. Sets the class, install/test binary, archive prefix, and Formula/<name>.rb path.")
 	flag.StringVar(&tap, "tap", "jmbarzee/homebrew-twf", "Homebrew tap repo to update.")
-	flag.StringVar(&source, "source", "jmbarzee/temporal-architect", "Source repo whose GitHub Release we're pinning to (twf: the toolchain; twf-serve: this dist repo, which builds + releases the binary).")
+	flag.StringVar(&source, "source", "jmbarzee/temporal-architect", "Source repo whose GitHub Release we're pinning to (twf: the toolchain; twf-view: this dist repo, which builds + releases the binary).")
 	flag.StringVar(&token, "token", os.Getenv("GITHUB_TOKEN"), "GitHub token with write access to the tap repo (defaults to $GITHUB_TOKEN).")
 	flag.StringVar(&out, "out", "", "If set, write formula to this file instead of pushing to the tap.")
 	flag.StringVar(&desc, "desc", DefaultDesc, "Homebrew formula `desc` one-liner (sourced from docs/descriptions.json by publish-brew).")
@@ -355,7 +355,7 @@ func exit(format string, args ...any) {
 }
 
 // pascalCase converts a hyphenated formula name into a Homebrew Ruby class name:
-// "twf" → "Twf", "twf-serve" → "TwfServe" (Homebrew strips separators and
+// "twf" → "Twf", "twf-view" → "TwfView" (Homebrew strips separators and
 // capitalizes each segment).
 func pascalCase(name string) string {
 	var b strings.Builder

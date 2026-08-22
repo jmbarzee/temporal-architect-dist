@@ -1,9 +1,9 @@
 {
-  "name": "@temporal-architect/serve-ui",
+  "name": "@temporal-architect/twf-view-ui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Build-only package: bundles @temporal-architect/visualizer into the single-file HTML asset embedded in the twf-serve Go binary (packages/twf-serve/ui/index.html). Never published — the serve UI is a packaging format, not a library. Mirrors packages/webview, but emits one self-contained HTML file (vite-plugin-singlefile) instead of the VS Code IIFE.",
+  "description": "Build-only package: bundles @temporal-architect/visualizer into the single-file HTML asset embedded in the twf-view Go binary (packages/twf-view/ui/index.html). Never published — the serve UI is a packaging format, not a library. Mirrors packages/webview, but emits one self-contained HTML file (vite-plugin-singlefile) instead of the VS Code IIFE.",
   "scripts": {
     "build": "vite build"
   },

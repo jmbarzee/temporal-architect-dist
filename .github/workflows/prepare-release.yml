@@ -45,15 +45,15 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      # twf-serve is dist-owned Go source; the bump PR carries its version
-      # alignment (tools/lsp go.mod pin + rebuilt serve-ui bundle) so the tag the
-      # release later cuts backs a correct `go install …/twf-serve@vX`.
+      # twf-view is dist-owned Go source; the bump PR carries its version
+      # alignment (tools/lsp go.mod pin + rebuilt twf-view-ui bundle) so the tag the
+      # release later cuts backs a correct `go install …/twf-view@vX`.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - uses: actions/setup-go@v5
         with:
-          go-version-file: packages/twf-serve/go.mod
+          go-version-file: packages/twf-view/go.mod
 
       - name: Resolve + normalize version
         id: v
@@ -88,19 +88,19 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         run: make stamp-committed-versions VERSION=${{ steps.v.outputs.version }}
 
-      # Align twf-serve to the release: pin its in-process pipeline dep
-      # (tools/lsp go.mod + go.sum), resync serve-ui's lockfile to the
+      # Align twf-view to the release: pin its in-process pipeline dep
+      # (tools/lsp go.mod + go.sum), resync twf-view-ui's lockfile to the
       # just-stamped visualizer version, and rebuild the embedded bundle. All are
-      # committed with the bump so a `go install …/twf-serve@vX` sees deps + UI
+      # committed with the bump so a `go install …/twf-view@vX` sees deps + UI
       # matching v$VER. (The visualizer package.json pin itself is done by
       # stamp-committed-versions above; `npm install` — not `npm ci` — is used
       # here precisely because that pin just moved the lockfile out of sync.)
-      - name: Align twf-serve deps + bundle
+      - name: Align twf-view deps + bundle
         if: steps.guard.outputs.skip != 'true'
         run: |
-          make pin-serve-lsp VERSION=${{ steps.v.outputs.version }}
-          (cd packages/serve-ui && npm install)
-          make build-serve-ui
+          make pin-twf-view-lsp VERSION=${{ steps.v.outputs.version }}
+          (cd packages/twf-view-ui && npm install)
+          make build-twf-view-ui
 
       - name: Open / refresh bump PR and supersede older ones
         if: steps.guard.outputs.skip != 'true'
@@ -115,10 +115,10 @@ jobs:
 
           # (Re)build the branch from the stamped tree. Force is safe: the branch
           # is bot-owned and manifests-only — never hand-edit it. Stage only the
-          # paths the stamp + twf-serve alignment steps touch, so nothing else
-          # can ever leak into the commit. The twf-serve paths (serve-ui pin,
+          # paths the stamp + twf-view alignment steps touch, so nothing else
+          # can ever leak into the commit. The twf-view paths (twf-view-ui pin,
           # go.mod/go.sum pin, rebuilt bundle) ride the same bump so the release
-          # tag backs a correct `go install …/twf-serve@vX`.
+          # tag backs a correct `go install …/twf-view@vX`.
           git checkout -b "$BRANCH"
           git add .claude-plugin/marketplace.json \
                   packages/vscode/package.json \
@@ -127,11 +127,11 @@ jobs:
                   packages/npm/claude-plugin/package.json \
                   packages/pypi/twf-cli/pyproject.toml \
                   packages/pypi/twf-cli/src/twf_cli/__init__.py \
-                  packages/serve-ui/package.json \
-                  packages/serve-ui/package-lock.json \
-                  packages/twf-serve/go.mod \
-                  packages/twf-serve/go.sum \
-                  packages/twf-serve/ui/index.html
+                  packages/twf-view-ui/package.json \
+                  packages/twf-view-ui/package-lock.json \
+                  packages/twf-view/go.mod \
+                  packages/twf-view/go.sum \
+                  packages/twf-view/ui/index.html
           git commit -m "release: stamp committed manifests to v$VER"
           git push -f origin "$BRANCH"
 

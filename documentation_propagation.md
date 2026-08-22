@@ -54,7 +54,7 @@ artifact; — = out of scope for that listing.
 | Homebrew formula | dist | one-liner | ✅ | (adv) | (adv?) | — | — | ✅ |
 | `install.sh` / GitHub Release | dist | light | ✅ | (adv) | (adv?) | — | — | ✅ |
 | `go install` (twf) | toolchain | light | ✅ | (adv) | — | — | — | ✅ |
-| `twf-serve` (Homebrew + `go install`) | dist | light | — | — | — | ✅ (live host) | — | ✅ |
+| `twf-view` (Homebrew + `go install`) | dist | light | — | — | — | ✅ (live host) | — | ✅ |
 | Smithery MCP registry (future) | dist | ✅ | — | ✅ | — | — | — | ✅ |
 
 Read down a column to see how widely a component must propagate; read across a
@@ -91,11 +91,11 @@ limitations in view.
   stays out of the listings until it lands.
 - **`go install` of the toolchain `twf` CLI** — was long broken for external users: `tools/lsp/go.mod`
   carried `replace` directives that `go install pkg@version` ignores. As of toolchain **v0.14.0**
-  (#151) those replaces were dropped, which is also what lets `twf-serve` import `tools/lsp`
+  (#151) those replaces were dropped, which is also what lets `twf-view` import `tools/lsp`
   in-process. Before re-advertising the toolchain's own `go install …/twf` path (or restoring the
   extension's language-server failure message), confirm the current Release still ships a
-  replace-free `tools/lsp/go.mod`. Note this does **not** gate `twf-serve`'s own
-  `go install github.com/jmbarzee/temporal-architect-dist/packages/twf-serve@vX`, which is a
+  replace-free `tools/lsp/go.mod`. Note this does **not** gate `twf-view`'s own
+  `go install github.com/jmbarzee/temporal-architect-dist/packages/twf-view@vX`, which is a
   dist-owned module with no replaces and is advertised freely.
 
 ## Strategy (implemented) and what's deferred

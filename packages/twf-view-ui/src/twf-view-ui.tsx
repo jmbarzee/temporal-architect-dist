@@ -13,7 +13,7 @@ import '@temporal-architect/visualizer/styles.css'
 // Mount registry-generated node-type CSS variables once at module load.
 mountNodeTypeStyles()
 
-// twf-serve entry point. This is the host-specific glue — the SSE transport and
+// twf-view entry point. This is the host-specific glue — the SSE transport and
 // the /decompose POST — that wraps the host-agnostic @temporal-architect/visualizer
 // library. It is the browser end of the wire contract the Go server defines, and
 // the direct sibling of packages/webview's postMessage glue: the same shared
@@ -44,7 +44,7 @@ const source: PayloadSource = {
       try {
         onMessage(JSON.parse(e.data) as HostMessage)
       } catch {
-        onMessage({ type: 'error', message: 'malformed event from twf-serve' })
+        onMessage({ type: 'error', message: 'malformed event from twf-view' })
       }
     }
     // EventSource reconnects on its own, and the server re-pushes the current

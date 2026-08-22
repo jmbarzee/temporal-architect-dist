@@ -15,7 +15,7 @@ import (
 //	{ type: 'ast';   data: <wrapped payload> }
 //	{ type: 'error'; message: string }
 //
-// The serve-ui SSE transport JSON-parses each event's `data:` line straight
+// The twf-view-ui SSE transport JSON-parses each event's `data:` line straight
 // into this shape and forwards it to the shell, so this struct IS the wire
 // contract between the Go host and the browser shell.
 type hostMessage struct {

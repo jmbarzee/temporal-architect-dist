@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import { resolve } from 'path'
 
-// Build the twf-serve visualizer bundle from the published
+// Build the twf-view visualizer bundle from the published
 // @temporal-architect/visualizer library as ONE self-contained HTML file.
 //
 // This is a packaging format, not a library — the sibling of packages/webview.
@@ -15,11 +15,11 @@ import { resolve } from 'path'
 //
 // Output lands in the Go package's embed dir; that file is COMMITTED (not
 // gitignored like the webview bundle) because `go install` fetches the module
-// from the proxy and cannot run vite. See packages/twf-serve/assets.go.
+// from the proxy and cannot run vite. See packages/twf-view/assets.go.
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   build: {
-    outDir: resolve(__dirname, '../twf-serve/ui'),
+    outDir: resolve(__dirname, '../twf-view/ui'),
     emptyOutDir: true,
     cssCodeSplit: false,
     // Inline every asset regardless of size so nothing is emitted as a separate
