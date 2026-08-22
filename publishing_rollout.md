@@ -51,12 +51,12 @@ Verified byte-for-byte locally against the dist `Makefile`:
 |---|---|
 | `twf-v<V>-{darwin,linux}-{amd64,arm64}.tar.gz`, `twf-v<V>-windows-amd64.zip` | npm-twf sub-pkgs, pypi wheels, VSIX binary |
 | `skills-v<V>.tar.gz` | claude-plugin, VSIX |
-| `temporal-architect-visualizer-<V>.tgz` | VSIX webview build (`file:`, via `packages/webview`). *(npm publish of this package happens in the toolchain, not here.)* |
+| `temporal-architect-visualizer-<V>.tgz` | VSIX webview build (`file:`, via `packages/vscode-ui`). *(npm publish of this package happens in the toolchain, not here.)* |
 | `temporal-architect-wire-types-<V>.tgz` | VSIX build types (`file:`). *(npm publish happens in the toolchain.)* |
 | `SHA256SUMS` | integrity |
 
 > The `visualizer-webview-v<V>.tar.gz` asset is gone: the webview IIFE bundle is now
-> built in this repo (`packages/webview`) from the visualizer library tarball.
+> built in this repo (`packages/vscode-ui`) from the visualizer library tarball.
 
 ### Dependency graph (what blocks what)
 
