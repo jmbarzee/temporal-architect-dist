@@ -45,6 +45,16 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      # twf-serve is dist-owned Go source; the bump PR carries its version
+      # alignment (tools/lsp go.mod pin + rebuilt serve-ui bundle) so the tag the
+      # release later cuts backs a correct `go install …/twf-serve@vX`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/twf-serve/go.mod
+
       - name: Resolve + normalize version
         id: v
         run: |
@@ -78,6 +88,20 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         run: make stamp-committed-versions VERSION=${{ steps.v.outputs.version }}
 
+      # Align twf-serve to the release: pin its in-process pipeline dep
+      # (tools/lsp go.mod + go.sum), resync serve-ui's lockfile to the
+      # just-stamped visualizer version, and rebuild the embedded bundle. All are
+      # committed with the bump so a `go install …/twf-serve@vX` sees deps + UI
+      # matching v$VER. (The visualizer package.json pin itself is done by
+      # stamp-committed-versions above; `npm install` — not `npm ci` — is used
+      # here precisely because that pin just moved the lockfile out of sync.)
+      - name: Align twf-serve deps + bundle
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          make pin-serve-lsp VERSION=${{ steps.v.outputs.version }}
+          (cd packages/serve-ui && npm install)
+          make build-serve-ui
+
       - name: Open / refresh bump PR and supersede older ones
         if: steps.guard.outputs.skip != 'true'
         env:
@@ -91,8 +115,10 @@ jobs:
 
           # (Re)build the branch from the stamped tree. Force is safe: the branch
           # is bot-owned and manifests-only — never hand-edit it. Stage only the
-          # manifest paths stamp-committed-versions touches, so nothing else can
-          # ever leak into the commit.
+          # paths the stamp + twf-serve alignment steps touch, so nothing else
+          # can ever leak into the commit. The twf-serve paths (serve-ui pin,
+          # go.mod/go.sum pin, rebuilt bundle) ride the same bump so the release
+          # tag backs a correct `go install …/twf-serve@vX`.
           git checkout -b "$BRANCH"
           git add .claude-plugin/marketplace.json \
                   packages/vscode/package.json \
@@ -100,7 +126,12 @@ jobs:
                   packages/npm/twf-*/package.json \
                   packages/npm/claude-plugin/package.json \
                   packages/pypi/twf-cli/pyproject.toml \
-                  packages/pypi/twf-cli/src/twf_cli/__init__.py
+                  packages/pypi/twf-cli/src/twf_cli/__init__.py \
+                  packages/serve-ui/package.json \
+                  packages/serve-ui/package-lock.json \
+                  packages/twf-serve/go.mod \
+                  packages/twf-serve/go.sum \
+                  packages/twf-serve/ui/index.html
           git commit -m "release: stamp committed manifests to v$VER"
           git push -f origin "$BRANCH"
 

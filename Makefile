@@ -17,6 +17,14 @@ VER      := $(patsubst v%,%,$(VERSION))
 ASSETS  := dist-assets
 EXT_DIR := packages/vscode
 
+# twf-serve is dist-owned Go source (built here, not downloaded); serve-ui is its
+# embedded single-file UI bundle. See the "twf-serve" section below.
+SERVE_DIR   := packages/twf-serve
+SERVEUI_DIR := packages/serve-ui
+# This repo — where the twf-serve binary is built, released, and the Homebrew
+# formula points (the toolchain releases twf; dist releases twf-serve).
+DIST_REPO ?= jmbarzee/temporal-architect-dist
+
 # Sibling toolchain checkout, used by `fetch-local`/`dev` for local F5 testing
 # against a live build (not a downloaded Release). Override if it lives elsewhere.
 TOOLCHAIN ?= ../temporal-architect
@@ -95,6 +103,11 @@ stamp-committed-versions: require-version
 	@# "@temporal-architect/twf" or a prior "…twf@x.y.z" pin, never the
 	@# "…twf-<platform>" subpackages (which are followed by '-', not '@' or '"').
 	@sed -i.bak 's|"@temporal-architect/twf\(@[^"]*\)\{0,1\}"|"@temporal-architect/twf@$(VER)"|g' .claude-plugin/marketplace.json && rm -f .claude-plugin/marketplace.json.bak
+	@# serve-ui embeds the published visualizer library; pin it to this release so
+	@# the bundle go-installed at v$(VER) matches. (The Go-side tools/lsp pin needs
+	@# `go get` and rides the release build, not this sed-only stamp — see
+	@# pin-serve-lsp / _release-twf-serve.yml.)
+	@sed -i.bak 's|"@temporal-architect/visualizer": *"[^"]*"|"@temporal-architect/visualizer": "$(VER)"|' $(SERVEUI_DIR)/package.json && rm -f $(SERVEUI_DIR)/package.json.bak
 	@echo "Stamped committed version fields to $(VER)"
 
 ## Stamp everything a release build needs: the committed version fields (above)
@@ -355,6 +368,67 @@ publish-brew: require-version
 	@desc=$$(node -p "require('./docs/descriptions.json').homebrew"); \
 	cd internal/release/bump-brew && go run . -version v$(VER) -source $(SRC_REPO) -token $(HOMEBREW_TAP_TOKEN) -desc "$$desc"
 
+# ── twf-serve (Go binary BUILT here, not downloaded) ─────────────────────────
+#
+# Unlike every other channel, twf-serve is dist-owned SOURCE, not a repackaging
+# of a toolchain binary: it imports the toolchain's tools/lsp/pipeline as a
+# library (in-process, no subprocess) and embeds the serve-ui single-file bundle.
+# So this repo CROSS-COMPILES it — the one place dist builds Go — rather than
+# downloading a prebuilt archive via fetch-release. Archive names mirror the
+# toolchain's (`twf-serve-v$(VER)-<os>-<arch>.{tar.gz,zip}`) so the same PLATFORMS
+# matrix, Homebrew formula shape, and Release-asset conventions carry over.
+
+.PHONY: build-serve-ui build-twf-serve-archive twf-serve-archives pin-serve-lsp publish-brew-serve
+
+## Build the single-file visualizer bundle twf-serve embeds. Regenerates
+## $(SERVE_DIR)/ui/index.html — committed (NOT gitignored like the webview
+## bundle) so `go install`/`go build` of the module always has an asset to embed
+## (the module proxy cannot run vite). Run once before cross-compiling.
+build-serve-ui:
+	cd $(SERVEUI_DIR) && npm ci && npm run build
+
+## Cross-compile + archive twf-serve for ONE platform into $(ASSETS). Assumes the
+## serve-ui bundle is already built (does not rebuild it per platform).
+## Usage: make build-twf-serve-archive VERSION=1.2.3 GOOS=darwin GOARCH=arm64
+build-twf-serve-archive: require-version
+	@mkdir -p $(ASSETS) $(SERVE_DIR)/dist
+	@ext=""; [ "$(GOOS)" = "windows" ] && ext=".exe"; \
+	( cd $(SERVE_DIR) && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
+		go build -trimpath -ldflags "-s -w -X main.version=$(VER)" -o "dist/twf-serve$$ext" . ); \
+	if [ "$(GOOS)" = "windows" ]; then \
+		( cd $(SERVE_DIR)/dist && zip -q "twf-serve-v$(VER)-$(GOOS)-$(GOARCH).zip" "twf-serve$$ext" ); \
+		mv "$(SERVE_DIR)/dist/twf-serve-v$(VER)-$(GOOS)-$(GOARCH).zip" "$(ASSETS)/"; \
+	else \
+		tar -C "$(SERVE_DIR)/dist" -czf "$(ASSETS)/twf-serve-v$(VER)-$(GOOS)-$(GOARCH).tar.gz" "twf-serve"; \
+	fi; \
+	echo "Archived twf-serve-v$(VER)-$(GOOS)-$(GOARCH)"
+
+## Build the bundle once, then cross-compile + archive twf-serve for every
+## platform in PLATFORMS. Produces $(ASSETS)/twf-serve-v$(VER)-*.{tar.gz,zip} —
+## the assets the dist GitHub Release ships and the Homebrew formula points at.
+twf-serve-archives: require-version build-serve-ui
+	@for pt in $(PLATFORMS); do \
+		os=$$(echo $$pt | cut -d: -f2); arch=$$(echo $$pt | cut -d: -f3); \
+		$(MAKE) build-twf-serve-archive VERSION=$(VER) GOOS=$$os GOARCH=$$arch || exit 1; \
+	done
+
+## Pin twf-serve's in-process pipeline dep (tools/lsp) to this release's toolchain
+## module tag, updating go.mod + go.sum atomically. Requires Go + network, so it
+## rides the release build (not the sed-only stamp-committed-versions — which
+## already pins serve-ui's visualizer npm dep). Together they make a
+## `go install …/twf-serve@vVER` see a tree whose embedded UI and in-process
+## pipeline both match the toolchain release v$(VER).
+pin-serve-lsp: require-version
+	cd $(SERVE_DIR) && go get github.com/jmbarzee/temporal-architect/tools/lsp@v$(VER) && go mod tidy
+
+## Bump the tap's Formula/twf-serve.rb to this version's DIST Release archives.
+## twf-serve is built + released by THIS repo (not the toolchain), so -source is
+## the dist repo. Required env: HOMEBREW_TAP_TOKEN.
+publish-brew-serve: require-version
+	@if [ -z "$(HOMEBREW_TAP_TOKEN)" ]; then echo "Error: HOMEBREW_TAP_TOKEN not set"; exit 1; fi
+	@desc=$$(node -p "require('./docs/descriptions.json')['homebrew-serve'] || 'Live temporal-architect visualizer over local HTTP (twf-serve)'"); \
+	cd internal/release/bump-brew && go run . -name twf-serve -version v$(VER) -source $(DIST_REPO) -token $(HOMEBREW_TAP_TOKEN) -desc "$$desc"
+
 # ── Clean ────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
@@ -363,6 +437,7 @@ clean:
 	rm -rf packages/webview/node_modules
 	rm -rf packages/npm/twf-*/bin packages/npm/twf*/LICENSE packages/npm/claude-plugin/skills
 	rm -rf packages/pypi/twf-cli/dist packages/pypi/twf-cli/src/twf_cli/_binary
+	rm -rf $(SERVE_DIR)/dist $(SERVEUI_DIR)/node_modules
 	@# Generated (gitignored) package READMEs composed by render-docs.
 	rm -f packages/vscode/README.md packages/npm/twf/README.md packages/pypi/twf-cli/README.md packages/npm/claude-plugin/README.md
 	@echo "Cleaned"

@@ -54,6 +54,7 @@ artifact; — = out of scope for that listing.
 | Homebrew formula | dist | one-liner | ✅ | (adv) | (adv?) | — | — | ✅ |
 | `install.sh` / GitHub Release | dist | light | ✅ | (adv) | (adv?) | — | — | ✅ |
 | `go install` (twf) | toolchain | light | ✅ | (adv) | — | — | — | ✅ |
+| `twf-serve` (Homebrew + `go install`) | dist | light | — | — | — | ✅ (live host) | — | ✅ |
 | Smithery MCP registry (future) | dist | ✅ | — | ✅ | — | — | — | ✅ |
 
 Read down a column to see how widely a component must propagate; read across a
@@ -88,10 +89,14 @@ limitations in view.
   That is fine, but it makes a Smithery listing the first MCP-only pitch. [#6](https://github.com/jmbarzee/temporal-architect-dist/issues/6). Skills are
   still not exposed over MCP (the binary does not embed them — toolchain [#77](https://github.com/jmbarzee/temporal-architect/issues/77)); that copy
   stays out of the listings until it lands.
-- **`go install` is broken for external users** — `tools/lsp/go.mod` carries two `replace` directives
-  and `go install pkg@version` ignores them. The advertising has been walked back everywhere,
-  including the extension's language-server failure message. It must not be re-advertised until both
-  replaces are gone.
+- **`go install` of the toolchain `twf` CLI** — was long broken for external users: `tools/lsp/go.mod`
+  carried `replace` directives that `go install pkg@version` ignores. As of toolchain **v0.14.0**
+  (#151) those replaces were dropped, which is also what lets `twf-serve` import `tools/lsp`
+  in-process. Before re-advertising the toolchain's own `go install …/twf` path (or restoring the
+  extension's language-server failure message), confirm the current Release still ships a
+  replace-free `tools/lsp/go.mod`. Note this does **not** gate `twf-serve`'s own
+  `go install github.com/jmbarzee/temporal-architect-dist/packages/twf-serve@vX`, which is a
+  dist-owned module with no replaces and is advertised freely.
 
 ## Strategy (implemented) and what's deferred
 
