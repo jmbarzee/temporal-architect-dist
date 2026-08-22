@@ -43,7 +43,7 @@ jobs:
           make fetch-release VERSION=${{ inputs.version }}
           make stamp-versions VERSION=${{ inputs.version }}
           make stage-skills VERSION=${{ inputs.version }}
-          make build-webview VERSION=${{ inputs.version }}
+          make build-vscode-ui VERSION=${{ inputs.version }}
           make build-extension VERSION=${{ inputs.version }}
         env:
           GH_TOKEN: ${{ github.token }}

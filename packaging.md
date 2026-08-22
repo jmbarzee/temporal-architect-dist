@@ -49,7 +49,7 @@ Distribution surfaces, where their source lives (T = this toolchain repo, D = di
 | Channel | Source | Install line | Audience |
 |---|---|---|---|
 | Go binary direct | `tools/lsp/` (T) | `curl -sSL .../install.sh \| bash` (external `go install …@latest` is unsupported — see documentation_propagation.md gap 7) | Direct binary users |
-| VS Code / Cursor / Open VSX extension | `packages/vscode/` (D); binary + wire-types downloaded from the T Release; webview built in `packages/webview/` (D) from the visualizer library | VSIX (5 platforms) on VS Code Marketplace + Open VSX | Cursor, VS Code, Codium devs |
+| VS Code / Cursor / Open VSX extension | `packages/vscode/` (D); binary + wire-types downloaded from the T Release; webview built in `packages/vscode-ui/` (D) from the visualizer library | VSIX (5 platforms) on VS Code Marketplace + Open VSX | Cursor, VS Code, Codium devs |
 | npm wrapper + 5 platform sub-packages | `packages/npm/` (D); binary archives from the T Release | `npx -y @temporal-architect/twf` (also the canonical MCP install line) | Node / TS, MCP clients |
 | npm visualizer + wire-types | built **and published in T** (`tools/visualizer`, `tools/wire-types`) — libraries, published from the repo that owns them | `npm install @temporal-architect/visualizer` / `…/wire-types` | Library + type consumers |
 | PyPI wheels | `packages/pypi/twf-cli/` (D); binary archives from the T Release | `pip install twf-cli` | Python ecosystem, spec-builder Temporal worker |
@@ -158,7 +158,7 @@ Generalizes to wrapper + sub-package shapes (e.g. `@temporal-architect/twf`).
 
 Targets follow `<verb>-<thing>[-<variant>]`:
 
-- `build-webview`, `build-extension`, `build-claude-plugin` (dist); `build-lsp`, `build-visualizer-lib` (toolchain)
+- `build-vscode-ui`, `build-extension`, `build-claude-plugin` (dist); `build-lsp`, `build-visualizer-lib` (toolchain)
 - `build-twf-archive`, `build-skills-archive`, `build-pypi-wheel`
 - `package-platform`, `package-all`
 - `publish-vscode`, `publish-ovsx`, `publish-npm-platform`, `publish-npm`, `publish-npm-claude-plugin`, `publish-pypi`, `publish-brew`

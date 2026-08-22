@@ -144,7 +144,7 @@ check-versions: require-version
 
 # ── Stage downloaded assets into package trees ───────────────────────────────
 
-.PHONY: stage-binary stage-skills build-webview stage-docs render-docs
+.PHONY: stage-binary stage-skills build-vscode-ui stage-docs render-docs
 
 ## Extract the platform binary archive into the extension bin/ (for VSIX/npm/pypi).
 ## Usage: make stage-binary GOOS=darwin GOARCH=arm64
@@ -173,8 +173,8 @@ stage-skills: require-version
 ## VSIX build never waits on an npm publish) in the host glue and bundle a single
 ## IIFE the extension loads. Self-stamps the visualizer dep to the downloaded
 ## tarball, then installs + builds.
-build-webview: require-version
-	@sed -i.bak 's|\("@temporal-architect/visualizer": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-visualizer-$(VER).tgz"|' packages/webview/package.json && rm -f packages/webview/package.json.bak
+build-vscode-ui: require-version
+	@sed -i.bak 's|\("@temporal-architect/visualizer": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-visualizer-$(VER).tgz"|' packages/vscode-ui/package.json && rm -f packages/vscode-ui/package.json.bak
 	@# The dev flow reuses a constant git-describe --dirty version, so the
 	@# same-named local tarball changes content between runs. npm then either
 	@# skips it ("already satisfied") or trips EINTEGRITY against the committed
@@ -182,11 +182,11 @@ build-webview: require-version
 	@# Install the rest with the lock disabled (no integrity gate), then drop the
 	@# freshly-built lib straight into node_modules ourselves so its content is
 	@# always current. Release builds use unique versions and are unaffected.
-	cd packages/webview && npm install --no-audit --no-fund --no-package-lock
-	@rm -rf packages/webview/node_modules/@temporal-architect/visualizer
-	@mkdir -p packages/webview/node_modules/@temporal-architect/visualizer
-	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C packages/webview/node_modules/@temporal-architect/visualizer --strip-components=1
-	cd packages/webview && npm run build
+	cd packages/vscode-ui && npm install --no-audit --no-fund --no-package-lock
+	@rm -rf packages/vscode-ui/node_modules/@temporal-architect/visualizer
+	@mkdir -p packages/vscode-ui/node_modules/@temporal-architect/visualizer
+	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C packages/vscode-ui/node_modules/@temporal-architect/visualizer --strip-components=1
+	cd packages/vscode-ui && npm run build
 	@echo "Built webview bundle into $(EXT_DIR)/dist/webview"
 
 # ── Composable docs (single source of truth) ────────────────────────────────
@@ -233,7 +233,7 @@ fetch-local:
 		VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
 	cp $(TOOLCHAIN)/dist/twf-v$(DEV_VER)-$(GOOS)-$(GOARCH).tar.gz $(ASSETS)/
 	@# npm pack names tarballs by the package's manifest version, which need not
-	@# equal the local git-describe DEV_VER; rename on copy so build-webview's
+	@# equal the local git-describe DEV_VER; rename on copy so build-vscode-ui's
 	@# file: path (…-$(DEV_VER).tgz) resolves. The tarball's internal version is
 	@# untouched (npm reads contents, not filename). Pick the NEWEST match (the
 	@# one this run just packed) so a dist/ that still holds older-version
@@ -249,7 +249,7 @@ fetch-local:
 ## prep — the target behind the "Run Extension (Local Toolchain)" launch config.
 ## Assumes the extension's node_modules are installed (`cd $(EXT_DIR) && npm install`).
 dev: fetch-local
-	$(MAKE) stage-binary build-webview stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
+	$(MAKE) stage-binary build-vscode-ui stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
 	cd $(EXT_DIR) && npm run compile
 	@echo "Extension ready — launch with F5 (Run Extension)"
 
@@ -434,7 +434,7 @@ publish-brew-view: require-version
 .PHONY: clean
 clean:
 	rm -rf $(ASSETS) $(EXT_DIR)/bin $(EXT_DIR)/dist $(EXT_DIR)/out $(EXT_DIR)/skills $(EXT_DIR)/*.vsix
-	rm -rf packages/webview/node_modules
+	rm -rf packages/vscode-ui/node_modules
 	rm -rf packages/npm/twf-*/bin packages/npm/twf*/LICENSE packages/npm/claude-plugin/skills
 	rm -rf packages/pypi/twf-cli/dist packages/pypi/twf-cli/src/twf_cli/_binary
 	rm -rf $(VIEW_DIR)/dist $(VIEW_UI_DIR)/node_modules
