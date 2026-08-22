@@ -78,16 +78,57 @@ func TestRenderFormula_RepoIsInterpolated(t *testing.T) {
 
 func TestArchiveURL(t *testing.T) {
 	cases := []struct {
+		prefix   string
 		platform Platform
 		want     string
 	}{
-		{Platform{"darwin", "arm64"}, "https://github.com/jmbarzee/temporal-architect/releases/download/v0.3.2/twf-v0.3.2-darwin-arm64.tar.gz"},
-		{Platform{"linux", "amd64"}, "https://github.com/jmbarzee/temporal-architect/releases/download/v0.3.2/twf-v0.3.2-linux-amd64.tar.gz"},
+		{"twf", Platform{"darwin", "arm64"}, "https://github.com/jmbarzee/temporal-architect/releases/download/v0.3.2/twf-v0.3.2-darwin-arm64.tar.gz"},
+		{"twf", Platform{"linux", "amd64"}, "https://github.com/jmbarzee/temporal-architect/releases/download/v0.3.2/twf-v0.3.2-linux-amd64.tar.gz"},
+		{"twf-view", Platform{"darwin", "arm64"}, "https://github.com/jmbarzee/temporal-architect/releases/download/v0.3.2/twf-view-v0.3.2-darwin-arm64.tar.gz"},
 	}
 	for _, c := range cases {
-		got := archiveURL("jmbarzee/temporal-architect", "0.3.2", c.platform)
+		got := archiveURL("jmbarzee/temporal-architect", c.prefix, "0.3.2", c.platform)
 		if got != c.want {
-			t.Errorf("archiveURL(%s): got %q, want %q", c.platform, got, c.want)
+			t.Errorf("archiveURL(%s,%s): got %q, want %q", c.prefix, c.platform, got, c.want)
+		}
+	}
+}
+
+// TestRenderFormula_TwfView covers the parameterized (twf-view) rendering:
+// class name, archive prefix, install + test binary, and the dist source repo.
+func TestRenderFormula_TwfView(t *testing.T) {
+	got, err := renderFormula(FormulaData{
+		Version:       "0.14.0",
+		SourceRepo:    "jmbarzee/temporal-architect-dist",
+		Desc:          "Live Temporal design visualizer over local HTTP",
+		SHAs:          fixtureSHAs(),
+		Class:         pascalCase("twf-view"),
+		Binary:        "twf-view",
+		ArchivePrefix: "twf-view",
+	})
+	if err != nil {
+		t.Fatalf("renderFormula: %v", err)
+	}
+	wantSubstrings := []string{
+		`class TwfView < Formula`,
+		`homepage "https://github.com/jmbarzee/temporal-architect-dist"`,
+		`url "https://github.com/jmbarzee/temporal-architect-dist/releases/download/v0.14.0/twf-view-v0.14.0-darwin-arm64.tar.gz"`,
+		`url "https://github.com/jmbarzee/temporal-architect-dist/releases/download/v0.14.0/twf-view-v0.14.0-linux-amd64.tar.gz"`,
+		`bin.install "twf-view"`,
+		`shell_output("#{bin}/twf-view --version")`,
+	}
+	for _, want := range wantSubstrings {
+		if !strings.Contains(got, want) {
+			t.Errorf("twf-view formula missing %q\n--- full ---\n%s", want, got)
+		}
+	}
+}
+
+// TestPascalCase locks the class-name derivation.
+func TestPascalCase(t *testing.T) {
+	for in, want := range map[string]string{"twf": "Twf", "twf-view": "TwfView"} {
+		if got := pascalCase(in); got != want {
+			t.Errorf("pascalCase(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
