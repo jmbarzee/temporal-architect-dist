@@ -1,0 +1,71 @@
+name: _publish-npm-serve
+
+# Reusable: publish @temporal-architect/payload and @temporal-architect/serve.
+#
+# payload is the shared toolchain-interpretation library (subprocess the `twf`
+# CLI → visualizer wire payload); serve is the Node/npx visualizer server that
+# depends on it. Both are assembled in this (dist) repo, so the Makefile
+# publishes them with --provenance (repository.url matches temporal-architect-dist).
+#
+# Order: payload first, serve second — serve's build `npm install`s payload@vX,
+# so it must already be on the registry. twf@vX is the OTHER runtime dep serve
+# resolves at build; _consume-release.yml orders this whole workflow AFTER
+# publish-npm-twf so the wrapper + platform packages are published first.
+#
+# serve's prepack builds the web-ui single-file bundle (from the toolchain's
+# published visualizer) and copies it into serve/assets/, so the published
+# package is self-contained — no runtime dependency on the visualizer lib.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Toolchain release version, e.g. 'v0.14.0' (without the leading 'v' is also accepted)."
+        type: string
+        required: true
+
+# Trusted publishing (OIDC) — no NPM_TOKEN. id-token:write must also be set on
+# the calling job in _consume-release.yml (npm validates the caller workflow
+# filename). The npm trusted-publisher config on npmjs.com must list BOTH
+# @temporal-architect/payload and @temporal-architect/serve with
+# repo=temporal-architect-dist, workflow=_consume-release.yml.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-payload:
+    name: Publish @temporal-architect/payload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Ensure npm supports OIDC (>= 11.5.1)
+        run: npm install -g npm@latest
+      - name: Stamp committed manifest versions
+        run: make stamp-committed-versions VERSION=${{ inputs.version }}
+      - name: Publish payload
+        run: make publish-npm-payload VERSION=${{ inputs.version }}
+
+  publish-serve:
+    name: Publish @temporal-architect/serve
+    needs: publish-payload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Ensure npm supports OIDC (>= 11.5.1)
+        run: npm install -g npm@latest
+      - name: Stamp committed manifest versions
+        run: make stamp-committed-versions VERSION=${{ inputs.version }}
+      - name: Publish serve
+        # `make publish-npm-serve` runs `npm install` (resolving the just-published
+        # payload@vX + twf@vX) then `npm publish`; serve's prepack builds the
+        # web-ui bundle and copies it into assets/.
+        run: make publish-npm-serve VERSION=${{ inputs.version }}

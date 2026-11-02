@@ -1,0 +1,45 @@
+{
+  "name": "@temporal-architect/payload",
+  "version": "0.14.0",
+  "description": "Host-agnostic toolchain interpretation: run the `twf` CLI over a `.twf` file set and assemble the visualizer wire payload (`{ ast, parserGraph, decomposition }`). Shared by the VS Code extension and `@temporal-architect/serve` so the two subprocess hosts never drift.",
+  "license": "MIT",
+  "homepage": "https://github.com/jmbarzee/temporal-architect",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jmbarzee/temporal-architect-dist",
+    "directory": "packages/payload"
+  },
+  "bugs": {
+    "url": "https://github.com/jmbarzee/temporal-architect/issues"
+  },
+  "keywords": [
+    "temporal",
+    "twf",
+    "temporal-architect",
+    "visualizer",
+    "payload"
+  ],
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "prepack": "cp ../../LICENSE LICENSE && npm run build",
+    "postpack": "rm -f LICENSE"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

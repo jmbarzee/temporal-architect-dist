@@ -220,6 +220,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
+    "@temporal-architect/payload": "file:../payload",
     "vscode-languageclient": "^9.0.1"
   }
 }

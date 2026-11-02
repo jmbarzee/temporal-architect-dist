@@ -13,11 +13,13 @@ import '@temporal-architect/visualizer/styles.css'
 // Mount registry-generated node-type CSS variables once at module load.
 mountNodeTypeStyles()
 
-// twf-view entry point. This is the host-specific glue — the SSE transport and
-// the /decompose POST — that wraps the host-agnostic @temporal-architect/visualizer
-// library. It is the browser end of the wire contract the Go server defines, and
-// the direct sibling of packages/webview's postMessage glue: the same shared
-// <VisualizerHost> shell, mapped onto a different host's two seams.
+// Shared SSE browser entry for the local-HTTP visualizer hosts. This is the
+// transport glue — the SSE stream and the /decompose POST — wrapping the
+// host-agnostic @temporal-architect/visualizer library. It is the browser end of
+// the wire contract the servers define, served verbatim by BOTH the Go twf-view
+// binary (go:embed) and the Node @temporal-architect/serve package. It is the
+// direct sibling of packages/vscode-ui's postMessage glue: the same shared
+// <VisualizerHost> shell, mapped onto a different transport's two seams.
 //
 // The shell owns everything both hosts used to hand-roll: payload normalization,
 // the AST-hash de-dupe that keeps the graph simulation from resetting on every
@@ -27,7 +29,7 @@ mountNodeTypeStyles()
 
 // Inbound seam. An EventSource over /events: the server pushes the current
 // payload immediately on connect (first paint) and again on every change — so,
-// unlike the webview, there is no `ready` handshake to request initial data.
+// unlike vscode-ui, there is no `ready` handshake to request initial data.
 // Each event's `data:` line is already a HostMessage ({type:'ast',data} |
 // {type:'error'}); we JSON-parse and forward, and the shell owns de-dupe +
 // normalization (including reading diagnostics from ast.diagnostics).
@@ -35,7 +37,7 @@ mountNodeTypeStyles()
 // Defined at module scope so its identity is stable across renders: the shell
 // subscribes once per mount (its effect keys on `source`). Recreating it per
 // render would tear down and reopen the EventSource every render — a far costlier
-// churn than the webview's postMessage listener, and it would drop the live
+// churn than vscode-ui's postMessage listener, and it would drop the live
 // connection on each React re-render.
 const source: PayloadSource = {
   subscribe(onMessage) {
@@ -44,7 +46,7 @@ const source: PayloadSource = {
       try {
         onMessage(JSON.parse(e.data) as HostMessage)
       } catch {
-        onMessage({ type: 'error', message: 'malformed event from twf-view' })
+        onMessage({ type: 'error', message: 'malformed event from server' })
       }
     }
     // EventSource reconnects on its own, and the server re-pushes the current
@@ -56,11 +58,11 @@ const source: PayloadSource = {
   },
 }
 
-// Outbound seam. This host wires the one action the webview deliberately leaves
+// Outbound seam. This host wires the one action vscode-ui deliberately leaves
 // off (its adapter notes the extension has no recompute handler): the UI→toolchain
 // decomposition trigger. requestDecomposition POSTs the params to /decompose; the
-// server recomputes via the in-process pipeline and pushes the fresh overlay back
-// through the SSE stream, so there is nothing to read from the POST response.
+// server recomputes (twf-view in-process, serve via `twf graph chunks`) and pushes
+// the fresh overlay back through the SSE stream — nothing to read from the POST.
 // openFile / refocus are omitted — a plain browser has no editor — and the shell
 // treats any unwired action as a no-op.
 const actions: HostActions = {

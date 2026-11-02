@@ -4,14 +4,14 @@ name: _release-twf-view
 #
 # twf-view is the one channel this repo BUILDS rather than repackages: it is
 # dist-owned Go source that imports the toolchain's tools/lsp/pipeline in-process
-# and embeds the twf-view-ui single-file bundle. So this workflow cross-compiles it
+# and embeds the web-ui single-file bundle. So this workflow cross-compiles it
 # for the PLATFORMS matrix, publishes a GitHub Release ON THIS (dist) repo with
 # the archives, and points the Homebrew formula at them. Creating the vX tag here
 # is also what makes `go install .../packages/twf-view@vX` resolvable.
 #
 # Ordering matters: the Release (with archives) must exist before the brew bump,
 # because bump-brew downloads each archive to hash it. The committed tree this
-# builds from is assumed already version-aligned by prepare-release.yml (twf-view-ui
+# builds from is assumed already version-aligned by prepare-release.yml (web-ui
 # visualizer pin + tools/lsp go.mod pin + rebuilt bundle ride the bump PR), so a
 # `go install @vX` sees deps + embedded UI that match the release.
 
@@ -45,7 +45,7 @@ jobs:
         with:
           go-version-file: packages/twf-view/go.mod
 
-      # Build the twf-view-ui bundle once, then cross-compile + archive twf-view for
+      # Build the web-ui bundle once, then cross-compile + archive twf-view for
       # every platform into dist-assets/twf-view-v<ver>-*.{tar.gz,zip}.
       - name: Build twf-view archives
         run: make twf-view-archives VERSION=${{ inputs.version }}

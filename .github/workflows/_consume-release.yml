@@ -27,6 +27,8 @@ on:
       - ".claude-plugin/marketplace.json"
       - "packages/vscode/package.json"
       - "packages/npm/**/package.json"
+      - "packages/payload/package.json"
+      - "packages/serve/package.json"
       - "packages/pypi/twf-cli/pyproject.toml"
       - "packages/pypi/twf-cli/src/twf_cli/__init__.py"
   workflow_dispatch:
@@ -109,6 +111,21 @@ jobs:
       id-token: write
       contents: read
     uses: ./.github/workflows/_publish-npm-twf.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+
+  # @temporal-architect/payload + serve — the shared toolchain-interpretation
+  # library and the Node/npx visualizer server. Ordered AFTER publish-npm-twf so
+  # that when the serve publish job `npm install`s its own deps for the build,
+  # both payload@vX (published first inside this workflow) and twf@vX are already
+  # on the registry. Same OIDC caller (_consume-release.yml) — the npm
+  # trusted-publisher config on npmjs.com must list both new packages.
+  publish-npm-serve:
+    needs: [resolve-version, check-versions, publish-npm-twf]
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/_publish-npm-serve.yml
     with:
       version: ${{ needs.resolve-version.outputs.version }}
 

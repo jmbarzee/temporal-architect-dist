@@ -1,4 +1,3 @@
-import { execFile } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -10,13 +9,16 @@ import {
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
-// Wire-format diagnostic produced inside the JSON envelope by every `twf`
-// subcommand. Generated from the Go DTO layer (envelope.Diagnostic) and shared
-// via the @temporal-architect/wire-types package; consumed type-only (the
-// import is erased at compile time, so it adds no runtime dependency).
-import type { Diagnostic as TwfDiagnostic } from "@temporal-architect/wire-types";
+// The shared toolchain-interpretation module: runs the `twf` CLI over a .twf
+// file set and assembles the visualizer wire payload ({ ast, parserGraph,
+// decomposition }). Also consumed by @temporal-architect/serve, so the two
+// subprocess hosts share one implementation instead of drifting copies.
+import {
+  buildPayload,
+  readObservedGraph,
+  type DecomposeOptions,
+} from "@temporal-architect/payload";
 
-const execFileAsync = promisify(execFile);
 const copyFileAsync = promisify(fs.copyFile);
 
 let client: LanguageClient | undefined;
@@ -839,27 +841,35 @@ class WorkflowVisualizerPanel {
       // Graph-only). There is no decomposition in history mode (chunks require
       // a .twf AST).
       if (this._historyFile) {
-        const parserGraph = await this._readObservedGraph();
-        const ast = { definitions: [] as unknown[], diagnostics: [] as TwfDiagnostic[] };
-        this._panel.webview.postMessage({
-          type: "ast",
-          data: { ast, parserGraph },
-        });
+        const parserGraph = await readObservedGraph(this._historyFile);
+        const ast = { definitions: [], diagnostics: [] };
+        this._panel.webview.postMessage({ type: "ast", data: { ast, parserGraph } });
         return;
       }
 
-      const ast = await this._parseFilesWithMetadata();
-      // `twf graph` is best-effort: graph extraction can fail in ways that
-      // `twf parse` doesn't (e.g. binary not yet rebuilt), but the tree
-      // view doesn't need it. If we can't get a parser graph, post the AST
-      // anyway and let the graph view render empty.
-      const parserGraph = await this._extractGraph();
-      // The decomposition (`twf graph chunks`) drives the Graph view's group
-      // overlay. Also best-effort and equally optional: when absent the overlay
-      // is simply inert. No recompute yet — the analysis runs at the configured
-      // default ceiling on every refresh.
-      const decomposition = await this._extractChunks();
-      this._panel.webview.postMessage({ type: "ast", data: { ast, parserGraph, decomposition } });
+      if (this._files.length === 0) {
+        throw new Error("No .twf files to visualize");
+      }
+
+      // Delegate the CLI subprocessing + payload assembly to the shared module
+      // (@temporal-architect/payload) — the same code @temporal-architect/serve
+      // runs, so the two subprocess hosts can never drift. This host owns only
+      // what is genuinely host-specific: resolving the parser binary and the
+      // decomposition settings, and posting to the webview.
+      //
+      // The overlay is always-on here: VS Code recomputes the chunk
+      // decomposition at the configured ceiling on every refresh (there is no
+      // UI→toolchain recompute trigger wired on the webview seam), so decompose
+      // options are always passed. `buildPayload` returns { ast, parserGraph,
+      // decomposition } — graph + chunks best-effort, parse authoritative — the
+      // exact shape the webview already consumes.
+      const data = await buildPayload({
+        twfBin: this._resolveParserBin(),
+        files: this._files,
+        decompose: this._decomposeOptions(),
+        focusedFile: this._focusedFile,
+      });
+      this._panel.webview.postMessage({ type: "ast", data });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this._panel.webview.postMessage({ type: "error", message: errorMessage });
@@ -867,247 +877,41 @@ class WorkflowVisualizerPanel {
   }
 
   /**
-   * Run `twf graph --json` once over the full file set. The graph is
-   * single-resolution-context (cross-file dispatch must resolve across
-   * the same merged AST `twf parse` already merges), so we make one
-   * multi-file call rather than per-file.
+   * Resolve the `twf` binary used for visualization subprocessing:
+   * user config (`twf.parser.path`) > bundled binary > `twf` on PATH.
    *
-   * Returns the `graph` payload from the envelope, or `undefined` if
-   * the call failed or the graph wasn't produced. Failures are logged
-   * but never thrown — the graph view degrades to "empty graph" rather
-   * than blocking the tree view.
+   * Host-specific and therefore kept here rather than in the shared payload
+   * module (which takes an already-resolved binary). The bundled binary path is
+   * relative to the extension install; the shared module knows nothing of that.
    */
-  private async _extractGraph(): Promise<unknown | undefined> {
-    if (this._files.length === 0) return undefined;
-
-    const config = vscode.workspace.getConfiguration("twf.parser");
-    const configPath = config.get<string>("path", "");
-
-    let resolvedCommand: string;
-    if (configPath) {
-      resolvedCommand = configPath;
-    } else {
-      const ext = process.platform === "win32" ? ".exe" : "";
-      const bundled = path.join(this._extensionUri.fsPath, "bin", `twf${ext}`);
-      resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
-    }
-
-    const graphArgs = ["graph", "--json", ...this._files];
-
-    try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, graphArgs);
-      if (stderr) {
-        console.warn("twf graph stderr:", stderr);
-      }
-      const envelope = JSON.parse(stdout) as { graph?: unknown };
-      return envelope.graph;
-    } catch (err) {
-      // Per-file parse errors come through as diagnostics (still
-      // produces a graph); only catastrophic failures land here.
-      console.warn("Failed to extract deployment graph:", err);
-      return undefined;
-    }
+  private _resolveParserBin(): string {
+    const configPath = vscode.workspace
+      .getConfiguration("twf.parser")
+      .get<string>("path", "");
+    if (configPath) return configPath;
+    const ext = process.platform === "win32" ? ".exe" : "";
+    const bundled = path.join(this._extensionUri.fsPath, "bin", `twf${ext}`);
+    return fs.existsSync(bundled) ? bundled : "twf";
   }
 
   /**
-   * Run `twf graph chunks --json` once over the full file set — the
-   * topology-based decomposition that powers the Graph view's group overlay.
-   * Same single-resolution-context, multi-file shape as `_extractGraph`.
-   *
-   * The decomposition only emits division suggestions for chunks above a
-   * complexity ceiling, so we pass `--ceiling` from the `twf.decompose.ceiling`
-   * setting (default 60; 0 disables the overlay). The resolved analysis
-   * parameters (ceiling / floor / max-depth / strategies) ride back inside the
-   * payload, so the webview's read-only Params tab needs nothing more here.
-   *
-   * Returns the `chunks` payload from the envelope, or `undefined` when the
-   * call failed or chunks weren't produced. Best-effort: failures are logged,
-   * never thrown — the group overlay degrades to "absent" rather than blocking
-   * the rest of the visualizer.
+   * Read the decomposition knobs from the `twf.decompose.*` settings into the
+   * shared module's DecomposeOptions. Only set fields are forwarded (an unset
+   * field takes the tool's own default); the resolved analysis parameters ride
+   * back inside the payload, so the webview's read-only Params tab needs nothing
+   * more here. A ceiling of 0 disables the overlay — passed through to the tool
+   * as-is (0 is a meaningful value, not "unset"), matching prior behavior.
    */
-  private async _extractChunks(): Promise<unknown | undefined> {
-    if (this._files.length === 0) return undefined;
-
-    const config = vscode.workspace.getConfiguration("twf.parser");
-    const configPath = config.get<string>("path", "");
-
-    let resolvedCommand: string;
-    if (configPath) {
-      resolvedCommand = configPath;
-    } else {
-      const ext = process.platform === "win32" ? ".exe" : "";
-      const bundled = path.join(this._extensionUri.fsPath, "bin", `twf${ext}`);
-      resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
-    }
-
-    const decomposeCfg = vscode.workspace.getConfiguration("twf.decompose");
-    const ceiling = decomposeCfg.get<number>("ceiling", 60);
-    const floor = decomposeCfg.get<number>("floor", 0);
-    const maxDepth = decomposeCfg.get<number>("maxDepth", 0);
-    const strategies = decomposeCfg.get<string[]>("strategies", []);
-
-    // Only forward the optional knobs when set — 0 / [] means "leave it to the
-    // tool", and passing an explicit 0 would override the tool's own default.
-    const chunkArgs = ["graph", "chunks", "--json", "--ceiling", String(ceiling)];
-    if (floor > 0) chunkArgs.push("--floor", String(floor));
-    if (maxDepth > 0) chunkArgs.push("--max-depth", String(maxDepth));
-    // --by takes ONE comma-separated value, not repeated flags: repeating it
-    // would silently keep only the last strategy.
-    if (strategies.length > 0) chunkArgs.push("--by", strategies.join(","));
-    chunkArgs.push(...this._files);
-
-    try {
-      const { stdout, stderr } = await execFileAsync(resolvedCommand, chunkArgs);
-      if (stderr) {
-        console.warn("twf graph chunks stderr:", stderr);
-      }
-      const envelope = JSON.parse(stdout) as { chunks?: unknown };
-      return envelope.chunks;
-    } catch (err) {
-      console.warn("Failed to extract decomposition:", err);
-      return undefined;
-    }
-  }
-
-  /**
-   * Read the sampler's observed-graph JSON (`{ observedGraph: { window, …,
-   * edges: [{ …, buckets }] } }`) and project it to the ParserGraph the
-   * visualizer's Graph view consumes.
-   *
-   * The observed graph is a superset of a ParserGraph: it adds a `window` and a
-   * per-edge `buckets` occurrence series. We drop `window` and keep the rest —
-   * the extra `buckets` field on each edge is inert for rendering. Projecting
-   * here (rather than posting the raw envelope) keeps the extension decoupled
-   * from the bundled visualizer's payload-normalization version.
-   *
-   * Best-effort: a missing/malformed file logs and returns undefined, and the
-   * Graph view renders empty rather than throwing.
-   */
-  private async _readObservedGraph(): Promise<unknown | undefined> {
-    if (!this._historyFile) return undefined;
-    try {
-      const raw = await fs.promises.readFile(this._historyFile, "utf8");
-      const parsed = JSON.parse(raw) as { observedGraph?: Record<string, unknown> };
-      const og = parsed.observedGraph;
-      if (!og) {
-        console.warn("observed-graph.json has no observedGraph payload:", this._historyFile);
-        return undefined;
-      }
-      // Project ObservedGraph -> ParserGraph: everything but the time axis.
-      const { window: _window, ...parserGraph } = og;
-      return parserGraph;
-    } catch (err) {
-      console.warn("Failed to read observed graph:", err);
-      return undefined;
-    }
-  }
-
-  /**
-   * Parse files and add metadata for source files and focused file.
-   */
-  private async _parseFilesWithMetadata(): Promise<unknown> {
-    const config = vscode.workspace.getConfiguration("twf.parser");
-    const configPath = config.get<string>("path", "");
-
-    // Resolve parser binary: user config > bundled binary > system PATH
-    let resolvedCommand: string;
-    if (configPath) {
-      resolvedCommand = configPath;
-    } else {
-      const ext = process.platform === "win32" ? ".exe" : "";
-      const bundled = path.join(this._extensionUri.fsPath, "bin", `twf${ext}`);
-      resolvedCommand = fs.existsSync(bundled) ? bundled : "twf";
-    }
-
-    const parts = (resolvedCommand + " parse").split(/\s+/);
-    const parserCommand = parts[0];
-    const baseArgs = parts.slice(1);
-
-    if (this._files.length === 0) {
-      throw new Error("No .twf files to parse");
-    }
-
-    // Parse each file individually to track source files
-    const allDefinitions: unknown[] = [];
-    const allErrors: { file: string; error: string; stderr?: string }[] = [];
-    // Structured validator/resolver/parse diagnostics from `twf parse`'s
-    // JSON envelope. Distinct from `allErrors` (FileError), which is now
-    // reserved for catastrophic parser-process failures (missing binary,
-    // IO failure, malformed envelope).
-    const allDiagnostics: TwfDiagnostic[] = [];
-
-    for (const file of this._files) {
-      try {
-        const { stdout, stderr } = await execFileAsync(parserCommand, [
-          ...baseArgs,
-          file,
-        ]);
-
-        // Diagnostics ride in the envelope now; stderr from `twf parse`
-        // is expected to be empty on a successful run. Surface any
-        // non-empty stderr through the dev console for debugging but
-        // do NOT wrap it as a FileError — that path masqueraded
-        // structured warnings as parser failures and is now gone. Older
-        // `twf` binaries that still write warnings to stderr will fail
-        // to surface them in the UI; this is a known incompatibility
-        // documented against this code path.
-        if (stderr) {
-          console.warn("Parser stderr:", stderr);
-        }
-
-        const parsed = JSON.parse(stdout) as {
-          definitions?: unknown[];
-          diagnostics?: TwfDiagnostic[];
-        };
-
-        // Add sourceFile to each definition
-        if (parsed.definitions) {
-          for (const def of parsed.definitions) {
-            (def as { sourceFile?: string }).sourceFile = file;
-            allDefinitions.push(def);
-          }
-        }
-
-        // Forward structured diagnostics into the webview payload.
-        // `twf parse` emits the path it was invoked with (absolute,
-        // matching the path the extension already passes); stamp a
-        // safety-net `file` on any diagnostic the producer left blank
-        // so the shown/hidden file-filter partition downstream has a
-        // valid key.
-        if (parsed.diagnostics) {
-          for (const diag of parsed.diagnostics) {
-            allDiagnostics.push({
-              ...diag,
-              file: diag.file && diag.file.length > 0 ? diag.file : file,
-            });
-          }
-        }
-      } catch (err) {
-        // Catastrophic parser-process failures only: execFileAsync
-        // rejecting (binary missing, exec error) or JSON.parse
-        // throwing. Validator/resolver warnings are NOT errors and
-        // travel via parsed.diagnostics above.
-        const errMsg = err instanceof Error ? err.message : String(err);
-        const stderr = (err as { stderr?: string }).stderr;
-        allErrors.push({
-          file,
-          error: errMsg,
-          stderr: stderr ? stderr.trim() : undefined,
-        });
-        console.warn(`Failed to parse ${file}:`, err);
-      }
-    }
-
-    // Return combined AST with focusedFile metadata, any process-level
-    // FileErrors, and the structured diagnostics envelope. The two are
-    // distinct: FileError covers parser-process failures; Diagnostic
-    // covers validator/resolver/parse findings inside a successful run.
-    return {
-      definitions: allDefinitions,
-      errors: allErrors.length > 0 ? allErrors : undefined,
-      diagnostics: allDiagnostics.length > 0 ? allDiagnostics : undefined,
-      focusedFile: this._focusedFile,
-    };
+  private _decomposeOptions(): DecomposeOptions {
+    const cfg = vscode.workspace.getConfiguration("twf.decompose");
+    const opts: DecomposeOptions = { ceiling: cfg.get<number>("ceiling", 60) };
+    const floor = cfg.get<number>("floor", 0);
+    const maxDepth = cfg.get<number>("maxDepth", 0);
+    const strategies = cfg.get<string[]>("strategies", []);
+    if (floor > 0) opts.floor = floor;
+    if (maxDepth > 0) opts.maxDepth = maxDepth;
+    if (strategies.length > 0) opts.by = strategies;
+    return opts;
   }
 
   private _getHtmlForWebview(): string {
