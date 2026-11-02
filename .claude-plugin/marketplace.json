@@ -10,7 +10,7 @@
         "package": "@temporal-architect/claude-plugin"
       },
       "strict": false,
-      "version": "0.14.0",
+      "version": "0.15.0",
       "description": "Design, validate, and implement entire Temporal systems: a `.twf` architecture toolchain with design, Go-authoring, and infra-provisioning skills, plus the twf MCP server.",
       "author": { "name": "jmbarzee" },
       "license": "MIT",
@@ -19,11 +19,10 @@
       "category": "languages",
       "skills": ["./skills"],
       "agents": ["./agents/project-discovery.md", "./agents/slice-mapper.md"],
-      "hooks": "./hooks/hooks.json",
       "mcpServers": {
         "twf": {
           "command": "npx",
-          "args": ["-y", "@temporal-architect/twf@0.14.0", "mcp"]
+          "args": ["-y", "@temporal-architect/twf@0.15.0", "mcp"]
         }
       }
     }
