@@ -3,15 +3,15 @@ package main
 import _ "embed"
 
 // indexHTML is the visualizer served at "/". It is the single-file bundle
-// produced by packages/twf-view-ui (vite + vite-plugin-singlefile): one HTML
+// produced by packages/web-ui (vite + vite-plugin-singlefile): one HTML
 // document with the JS and CSS inlined, so the Go binary embeds exactly one
 // asset and serves it with no external references.
 //
 // This file is COMMITTED build output, not gitignored (unlike the VS Code
 // webview bundle). A `go install` / `go build` of this module fetches it from
 // the module proxy and cannot run vite, so the embedded asset has to travel
-// inside the module. `make twf-view-ui` regenerates it from source; see
-// packages/twf-view-ui.
+// inside the module. `make build-web-ui` regenerates it from source; see
+// packages/web-ui.
 //
 //go:embed ui/index.html
 var indexHTML []byte

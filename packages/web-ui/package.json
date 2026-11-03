@@ -1,0 +1,23 @@
+{
+  "name": "@temporal-architect/web-ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-only package: the shared SSE browser entry for the local-HTTP visualizer hosts. Bundles @temporal-architect/visualizer into one self-contained HTML file (vite-plugin-singlefile) that BOTH the Go twf-view binary (go:embed) and the Node @temporal-architect/serve package serve at '/'. Never published — it is a packaging format, not a library. Sibling of packages/vscode-ui (same shell, postMessage transport) — distinguished by surface: web (SSE) vs editor.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@temporal-architect/visualizer": "0.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.5",
+    "vite-plugin-singlefile": "^2.0.3"
+  }
+}

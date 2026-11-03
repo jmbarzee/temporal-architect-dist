@@ -14,7 +14,7 @@ its own libraries (`visualizer`, `wire-types`); this repo publishes every
 The **one exception** to "no source build" is **`twf-view`** (`packages/twf-view`):
 dist-owned Go source that this repo cross-compiles. It is a live visualizer host —
 a local HTTP server that imports the toolchain's `tools/lsp/pipeline` in-process
-and embeds the `packages/twf-view-ui` single-file bundle. It is not a repackaged
+and embeds the `packages/web-ui` single-file bundle. It is not a repackaged
 toolchain binary, so it has its own build (Makefile `twf-view-archives`), its own
 dist GitHub Release + tag (which also backs `go install`), and its own Homebrew
 formula (`twf-view.rb`). See the "twf-view" section below.
@@ -87,21 +87,21 @@ source, is filed HERE.)
 `twf-view` (`packages/twf-view`) is dist-owned Go source, not a repackaged toolchain binary. It is
 a self-contained local HTTP server that hosts the visualizer live: it imports the toolchain's
 `tools/lsp/pipeline` **in-process** (no subprocess, no version skew) and embeds the
-`packages/twf-view-ui` single-file bundle. See issue #20.
+`packages/web-ui` single-file bundle. See issue #20.
 
 - **Two toolchain libraries, one binary.** The Go side pins `tools/lsp@vX` (the parse → graph →
-  decomposition pipeline); the UI side is `packages/twf-view-ui`, a build-only package (sibling of
+  decomposition pipeline); the UI side is `packages/web-ui`, a build-only package (sibling of
   `packages/webview`) that bundles `@temporal-architect/visualizer`'s `<VisualizerHost>` into one
   self-contained HTML file via `vite-plugin-singlefile`.
 - **The embedded bundle is COMMITTED** (`packages/twf-view/ui/index.html`), unlike the gitignored
   webview bundle — `go install` fetches the module from the proxy and cannot run vite, so the asset
-  must travel in the module. `make build-twf-view-ui` regenerates it.
+  must travel in the module. `make build-web-ui` regenerates it.
 - **Build + release.** `make twf-view-archives VERSION=X` cross-compiles the PLATFORMS matrix into
   `dist-assets/twf-view-vX-*.{tar.gz,zip}`. On release, `_release-twf-view.yml` publishes a dist
   GitHub Release with those archives (the `vX` tag also backs `go install`) and bumps
   `Formula/twf-view.rb` via the generalized `bump-brew -name twf-view`.
-- **Version pins ride the bump PR.** `stamp-committed-versions` pins twf-view-ui's visualizer npm dep;
-  `prepare-release.yml` additionally runs `pin-twf-view-lsp` (tools/lsp go.mod) + `build-twf-view-ui`, so
+- **Version pins ride the bump PR.** `stamp-committed-versions` pins web-ui's visualizer npm dep;
+  `prepare-release.yml` additionally runs `pin-twf-view-lsp` (tools/lsp go.mod) + `build-web-ui`, so
   the release tag backs a `go install …/twf-view@vX` whose deps + embedded UI match `vX`.
 
 ## Acquisition paths

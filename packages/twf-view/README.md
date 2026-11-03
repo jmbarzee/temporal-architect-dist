@@ -68,5 +68,5 @@ localhost-only tool by design.
 not the toolchain: it is dist-owned glue over two toolchain libraries — the Go
 `tools/lsp/pipeline` (parse → graph → decomposition) and the npm
 `@temporal-architect/visualizer` (the `<VisualizerHost>` shell, bundled into the
-single embedded HTML file by `packages/twf-view-ui`). See
+single embedded HTML file by `packages/web-ui`). See
 [issue #20](https://github.com/jmbarzee/temporal-architect-dist/issues/20).

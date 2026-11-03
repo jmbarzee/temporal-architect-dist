@@ -17,10 +17,11 @@ VER      := $(patsubst v%,%,$(VERSION))
 ASSETS  := dist-assets
 EXT_DIR := packages/vscode
 
-# twf-view is dist-owned Go source (built here, not downloaded); twf-view-ui is its
-# embedded single-file UI bundle. See the "twf-view" section below.
+# twf-view is dist-owned Go source (built here, not downloaded); web-ui is the
+# shared SSE browser bundle it embeds (also served by @temporal-architect/serve).
+# See the "twf-view" section below.
 VIEW_DIR   := packages/twf-view
-VIEW_UI_DIR := packages/twf-view-ui
+WEB_UI_DIR := packages/web-ui
 # This repo — where the twf-view binary is built, released, and the Homebrew
 # formula points (the toolchain releases twf; dist releases twf-view).
 DIST_REPO ?= jmbarzee/temporal-architect-dist
@@ -103,11 +104,20 @@ stamp-committed-versions: require-version
 	@# "@temporal-architect/twf" or a prior "…twf@x.y.z" pin, never the
 	@# "…twf-<platform>" subpackages (which are followed by '-', not '@' or '"').
 	@sed -i.bak 's|"@temporal-architect/twf\(@[^"]*\)\{0,1\}"|"@temporal-architect/twf@$(VER)"|g' .claude-plugin/marketplace.json && rm -f .claude-plugin/marketplace.json.bak
-	@# twf-view-ui embeds the published visualizer library; pin it to this release so
-	@# the bundle go-installed at v$(VER) matches. (The Go-side tools/lsp pin needs
-	@# `go get` and rides the release build, not this sed-only stamp — see
-	@# pin-twf-view-lsp / _release-twf-view.yml.)
-	@sed -i.bak 's|"@temporal-architect/visualizer": *"[^"]*"|"@temporal-architect/visualizer": "$(VER)"|' $(VIEW_UI_DIR)/package.json && rm -f $(VIEW_UI_DIR)/package.json.bak
+	@# @temporal-architect/payload + serve — new dist-owned npm packages. Stamp
+	@# their versions, and serve's runtime pins on payload + twf, so serve@$(VER)
+	@# resolves payload@$(VER) + twf@$(VER). (The VS Code extension consumes payload
+	@# via a committed file:../payload path — bundled into the VSIX with npm
+	@# --install-links — so it is never version-stamped here.)
+	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/payload/package.json && rm -f packages/payload/package.json.bak
+	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/serve/package.json && rm -f packages/serve/package.json.bak
+	@sed -i.bak 's|"@temporal-architect/payload": *"[^"]*"|"@temporal-architect/payload": "$(VER)"|' packages/serve/package.json && rm -f packages/serve/package.json.bak
+	@sed -i.bak 's|"@temporal-architect/twf": *"[^"]*"|"@temporal-architect/twf": "$(VER)"|' packages/serve/package.json && rm -f packages/serve/package.json.bak
+	@# web-ui embeds the published visualizer library; pin it to this release so
+	@# the bundle go-installed (via twf-view) at v$(VER) matches. (The Go-side
+	@# tools/lsp pin needs `go get` and rides the release build, not this sed-only
+	@# stamp — see pin-twf-view-lsp / _release-twf-view.yml.)
+	@sed -i.bak 's|"@temporal-architect/visualizer": *"[^"]*"|"@temporal-architect/visualizer": "$(VER)"|' $(WEB_UI_DIR)/package.json && rm -f $(WEB_UI_DIR)/package.json.bak
 	@echo "Stamped committed version fields to $(VER)"
 
 ## Stamp everything a release build needs: the committed version fields (above)
@@ -137,9 +147,13 @@ check-versions: require-version
 	check_node "npm wrapper" "packages/npm/twf/package.json"; \
 	for p in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do check_node "npm $$p" "packages/npm/twf-$$p/package.json"; done; \
 	check_node "claude plugin" "packages/npm/claude-plugin/package.json"; \
+	check_node "payload" "packages/payload/package.json"; \
+	check_node "serve" "packages/serve/package.json"; \
 	py=$$(python3 -c "import tomllib;print(tomllib.load(open('packages/pypi/twf-cli/pyproject.toml','rb'))['project']['version'])"); echo "  pypi: $$py"; [ "$$py" = "$(VER)" ] || { echo "::error::pyproject = $$py != $(VER)"; fail=1; }; \
 	mp=$$(node -p "require('./.claude-plugin/marketplace.json').plugins[0].version"); echo "  marketplace: $$mp"; [ "$$mp" = "$(VER)" ] || { echo "::error::.claude-plugin/marketplace.json = $$mp != $(VER)"; fail=1; }; \
 	mcp=$$(node -p "require('./.claude-plugin/marketplace.json').plugins[0].mcpServers.twf.args.find(a => a.indexOf('@temporal-architect/twf@') === 0)"); echo "  marketplace mcp pin: $$mcp"; [ "$$mcp" = "@temporal-architect/twf@$(VER)" ] || { echo "::error::marketplace.json MCP args pin = $$mcp != @temporal-architect/twf@$(VER)"; fail=1; }; \
+	sp=$$(node -p "require('./packages/serve/package.json').dependencies['@temporal-architect/payload']"); echo "  serve→payload pin: $$sp"; [ "$$sp" = "$(VER)" ] || { echo "::error::serve payload dep = $$sp != $(VER)"; fail=1; }; \
+	st=$$(node -p "require('./packages/serve/package.json').dependencies['@temporal-architect/twf']"); echo "  serve→twf pin: $$st"; [ "$$st" = "$(VER)" ] || { echo "::error::serve twf dep = $$st != $(VER)"; fail=1; }; \
 	exit $$fail
 
 # ── Stage downloaded assets into package trees ───────────────────────────────
@@ -247,19 +261,25 @@ fetch-local:
 ## toolchain archives into dist-assets/ (fetch-local), then runs the identical
 ## stage-* pipeline a Release uses and compiles the extension TS. The whole F5
 ## prep — the target behind the "Run Extension (Local Toolchain)" launch config.
-## Assumes the extension's node_modules are installed (`cd $(EXT_DIR) && npm install`).
-dev: fetch-local
+## Builds the shared payload lib first (the extension bundles it via
+## file:../payload) and (re)installs the extension deps with --install-links so
+## the copied payload lands in node_modules for F5.
+dev: fetch-local build-payload
 	$(MAKE) stage-binary build-vscode-ui stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
-	cd $(EXT_DIR) && npm run compile
+	cd $(EXT_DIR) && npm install --no-audit --no-fund --install-links && npm run compile
 	@echo "Extension ready — launch with F5 (Run Extension)"
 
 # ── VSIX (VS Code / Cursor / Open VSX) ───────────────────────────────────────
 
 .PHONY: build-extension package-platform publish-vscode publish-ovsx
 
-## Compile the extension TS against the published wire-types (+ staged webview/skills).
-build-extension: require-version
-	cd $(EXT_DIR) && npm install --no-audit --no-fund && npm run compile
+## Compile the extension TS (+ staged webview/skills). Builds the shared payload
+## lib first and installs with --install-links so the committed file:../payload
+## dep is COPIED into node_modules (a symlink would be dropped by vsce, leaving
+## payload out of the VSIX). wire-types is a type-only dep staged to a file:
+## tarball by stamp-versions.
+build-extension: require-version build-payload
+	cd $(EXT_DIR) && npm install --no-audit --no-fund --install-links && npm run compile
 	@echo "Compiled extension"
 
 ## Package a single-platform VSIX. Stages the binary first.
@@ -372,23 +392,29 @@ publish-brew: require-version
 #
 # Unlike every other channel, twf-view is dist-owned SOURCE, not a repackaging
 # of a toolchain binary: it imports the toolchain's tools/lsp/pipeline as a
-# library (in-process, no subprocess) and embeds the twf-view-ui single-file bundle.
+# library (in-process, no subprocess) and embeds the web-ui single-file bundle.
 # So this repo CROSS-COMPILES it — the one place dist builds Go — rather than
 # downloading a prebuilt archive via fetch-release. Archive names mirror the
 # toolchain's (`twf-view-v$(VER)-<os>-<arch>.{tar.gz,zip}`) so the same PLATFORMS
 # matrix, Homebrew formula shape, and Release-asset conventions carry over.
 
-.PHONY: build-twf-view-ui build-twf-view-archive twf-view-archives pin-twf-view-lsp publish-brew-view
+.PHONY: build-web-ui build-twf-view-archive twf-view-archives pin-twf-view-lsp publish-brew-view
 
-## Build the single-file visualizer bundle twf-view embeds. Regenerates
-## $(VIEW_DIR)/ui/index.html — committed (NOT gitignored like the webview
-## bundle) so `go install`/`go build` of the module always has an asset to embed
-## (the module proxy cannot run vite). Run once before cross-compiling.
-build-twf-view-ui:
-	cd $(VIEW_UI_DIR) && npm ci && npm run build
+## Build the shared single-file visualizer bundle (web-ui) and refresh the copy
+## twf-view embeds. web-ui owns the bundle (emitted to $(WEB_UI_DIR)/dist); this
+## copies it to $(VIEW_DIR)/ui/index.html — committed (NOT gitignored like the
+## vscode-ui bundle) so `go install`/`go build` of the twf-view module always has
+## an asset to embed (the module proxy cannot run vite). @temporal-architect/serve
+## takes its own copy from $(WEB_UI_DIR)/dist at prepack. Run once before
+## cross-compiling.
+build-web-ui:
+	cd $(WEB_UI_DIR) && npm ci && npm run build
+	@mkdir -p $(VIEW_DIR)/ui
+	@cp $(WEB_UI_DIR)/dist/index.html $(VIEW_DIR)/ui/index.html
+	@echo "Built web-ui bundle → $(WEB_UI_DIR)/dist + $(VIEW_DIR)/ui/index.html"
 
 ## Cross-compile + archive twf-view for ONE platform into $(ASSETS). Assumes the
-## twf-view-ui bundle is already built (does not rebuild it per platform).
+## web-ui bundle is already built (does not rebuild it per platform).
 ## Usage: make build-twf-view-archive VERSION=1.2.3 GOOS=darwin GOARCH=arm64
 build-twf-view-archive: require-version
 	@mkdir -p $(ASSETS) $(VIEW_DIR)/dist
@@ -406,7 +432,7 @@ build-twf-view-archive: require-version
 ## Build the bundle once, then cross-compile + archive twf-view for every
 ## platform in PLATFORMS. Produces $(ASSETS)/twf-view-v$(VER)-*.{tar.gz,zip} —
 ## the assets the dist GitHub Release ships and the Homebrew formula points at.
-twf-view-archives: require-version build-twf-view-ui
+twf-view-archives: require-version build-web-ui
 	@for pt in $(PLATFORMS); do \
 		os=$$(echo $$pt | cut -d: -f2); arch=$$(echo $$pt | cut -d: -f3); \
 		$(MAKE) build-twf-view-archive VERSION=$(VER) GOOS=$$os GOARCH=$$arch || exit 1; \
@@ -415,7 +441,7 @@ twf-view-archives: require-version build-twf-view-ui
 ## Pin twf-view's in-process pipeline dep (tools/lsp) to this release's toolchain
 ## module tag, updating go.mod + go.sum atomically. Requires Go + network, so it
 ## rides the release build (not the sed-only stamp-committed-versions — which
-## already pins twf-view-ui's visualizer npm dep). Together they make a
+## already pins web-ui's visualizer npm dep). Together they make a
 ## `go install …/twf-view@vVER` see a tree whose embedded UI and in-process
 ## pipeline both match the toolchain release v$(VER).
 pin-twf-view-lsp: require-version
@@ -429,6 +455,37 @@ publish-brew-view: require-version
 	@desc=$$(node -p "require('./docs/descriptions.json')['homebrew-view'] || 'Live temporal-architect visualizer over local HTTP (twf-view)'"); \
 	cd internal/release/bump-brew && go run . -name twf-view -version v$(VER) -source $(DIST_REPO) -token $(HOMEBREW_TAP_TOKEN) -desc "$$desc"
 
+# ── @temporal-architect/payload + serve (dist-owned npm packages) ────────────
+#
+# payload is the shared toolchain-interpretation library: it runs the `twf` CLI
+# and assembles the visualizer wire payload. The VS Code extension bundles it
+# from source (file:../payload, --install-links); @temporal-architect/serve — the
+# Node/npx sibling of twf-view — depends on the PUBLISHED payload + twf, plus the
+# web-ui bundle it serves over SSE. Both publish to npm via trusted publishing
+# (see _publish-npm-serve.yml); the visualizer they render is the toolchain's
+# published library, bundled by web-ui.
+
+.PHONY: build-payload publish-npm-payload publish-npm-serve
+
+## Build the shared payload library (tsc → dist/ + .d.ts). Fast and
+## dependency-light (only dev types); consumed by the extension (file:) and serve.
+build-payload:
+	cd packages/payload && npm install --no-audit --no-fund && npm run build
+
+## Publish @temporal-architect/payload to npm (trusted publishing / --provenance).
+## `npm install` first so prepack's tsc is available; publish BEFORE serve so
+## serve's payload@$(VER) pin resolves for end users.
+publish-npm-payload: require-version
+	cd packages/payload && npm install --no-audit --no-fund && npm publish --provenance
+
+## Publish @temporal-architect/serve to npm. Its prepack builds the web-ui bundle
+## (from the toolchain's published visualizer) and copies it into assets/, so the
+## published package is self-contained. `npm install` first so prepack's tsc sees
+## payload's types; assumes payload@$(VER) + twf@$(VER) are already on npm (the
+## workflow orders this job after both).
+publish-npm-serve: require-version
+	cd packages/serve && npm install --no-audit --no-fund && npm publish --provenance
+
 # ── Clean ────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
@@ -437,7 +494,9 @@ clean:
 	rm -rf packages/vscode-ui/node_modules
 	rm -rf packages/npm/twf-*/bin packages/npm/twf*/LICENSE packages/npm/claude-plugin/skills
 	rm -rf packages/pypi/twf-cli/dist packages/pypi/twf-cli/src/twf_cli/_binary
-	rm -rf $(VIEW_DIR)/dist $(VIEW_UI_DIR)/node_modules
+	rm -rf $(VIEW_DIR)/dist $(WEB_UI_DIR)/node_modules $(WEB_UI_DIR)/dist
+	rm -rf packages/payload/node_modules packages/payload/dist packages/payload/LICENSE
+	rm -rf packages/serve/node_modules packages/serve/dist packages/serve/assets packages/serve/LICENSE
 	@# Generated (gitignored) package READMEs composed by render-docs.
 	rm -f packages/vscode/README.md packages/npm/twf/README.md packages/pypi/twf-cli/README.md packages/npm/claude-plugin/README.md
 	@echo "Cleaned"
