@@ -273,7 +273,9 @@ fetch-local:
 ## the copied payload lands in node_modules for F5.
 dev: fetch-local build-payload
 	$(MAKE) stage-binary build-vscode-ui stage-skills VERSION=$(DEV_VER) GOOS=$(GOOS) GOARCH=$(GOARCH)
-	cd $(EXT_DIR) && npm install --no-audit --no-fund --install-links && npm run compile
+	@# Undo build-extension's build-only tarball rewrite, if one is lingering.
+	cd $(EXT_DIR) && npm pkg set "dependencies.@temporal-architect/payload=file:../payload" && \
+		npm install --no-audit --no-fund --install-links && npm run compile
 	@echo "Extension ready — launch with F5 (Run Extension)"
 
 # ── VSIX (VS Code / Cursor / Open VSX) ───────────────────────────────────────
@@ -290,7 +292,10 @@ dev: fetch-local build-payload
 build-extension: require-version build-payload
 	@mkdir -p $(ASSETS)
 	@tgz=$$(cd packages/payload && npm pack --pack-destination ../../$(ASSETS) --silent | tail -1) && \
+		[ -f "$(ASSETS)/$$tgz" ] || { echo "::error::npm pack of packages/payload failed"; exit 1; } && \
 		cd $(EXT_DIR) && npm pkg set "dependencies.@temporal-architect/payload=file:../../$(ASSETS)/$$tgz"
+	@# A re-packed same-version tarball reads as "up to date" to npm; drop the old copy.
+	rm -rf $(EXT_DIR)/node_modules/@temporal-architect/payload
 	cd $(EXT_DIR) && npm install --no-audit --no-fund && npm run compile
 	@echo "Compiled extension"
 
