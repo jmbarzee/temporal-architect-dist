@@ -146,6 +146,7 @@ jobs:
 
   publish-vsix-only:
     needs: [resolve-version, check-versions-vsix-only]
+    if: needs.resolve-version.outputs.vsix_only == 'true'
     permissions:
       id-token: write
       contents: read
