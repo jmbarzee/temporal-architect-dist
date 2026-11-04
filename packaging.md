@@ -216,8 +216,8 @@ Out-of-band steps required before the next tag push works end-to-end. None can b
 
 | Service | Account / value | GitHub secret |
 |---|---|---|
-| VS Code Marketplace | publisher `jmbarzee` | `VSCE_TOKEN` |
-| Open VSX | publisher `jmbarzee` | `OVSX_TOKEN` |
+| VS Code Marketplace | publisher `jmbarzee` | none — trusted publishing (OIDC) |
+| Open VSX | namespace `jmbarzee` | none — trusted publishing (OIDC) |
 | npm | scope `@temporal-architect` (claimed for visualizer) | `NPM_TOKEN` (reused for `@temporal-architect/twf*`) |
 | GitHub Releases | repo `jmbarzee/temporal-architect` | (built-in `GITHUB_TOKEN`) |
 
@@ -233,8 +233,8 @@ What `release.yml`'s reusable workflows expect, in one place:
 
 | Secret | Used by | Required for | Source |
 |---|---|---|---|
-| `VSCE_TOKEN` | `_publish-vsix.yml` | every release | VS Code Marketplace publisher dashboard |
-| `OVSX_TOKEN` | `_publish-vsix.yml` | every release | open-vsx.org publisher dashboard |
+| `VSCE_TOKEN` | (retired) VS Code Marketplace publishing uses OIDC trusted publishing (`vsce publish --oidc`) | — | no token; trusted-publishing policy at marketplace.visualstudio.com/manage → publisher `jmbarzee` → Trusted Publishing (repo `temporal-architect-dist`, workflow `_consume-release.yml`) |
+| `OVSX_TOKEN` | (retired) Open VSX publishing uses OIDC trusted publishing (`ovsx publish --trusted-publishing`) | — | no token; trusted publisher at open-vsx.org/user-settings/trusted-publishers → namespace `jmbarzee` (repo `temporal-architect-dist`, workflow `_consume-release.yml`) |
 | `NPM_TOKEN` | (retired) npm publishing now uses OIDC trusted publishing — `@temporal-architect/twf*` + `claude-plugin` from this repo (`_consume-release.yml`), `visualizer` + `wire-types` from the toolchain (`release.yml`) | — | no token; configure GitHub Actions trusted publishers per package on npmjs.com |
 | `PYPI_TOKEN` | `_publish-pypi.yml` | every release | pypi.org → Account settings → API tokens |
 | `HOMEBREW_TAP_TOKEN` | `_publish-brew.yml` | every release | github.com → Settings → Developer settings → PAT (`repo` scope on `<owner>/homebrew-twf`) |
