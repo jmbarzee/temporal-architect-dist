@@ -15,10 +15,18 @@ name: Publish Release
 # Manual re-run: "Run workflow" (workflow_dispatch), optionally overriding the
 # version, e.g. to re-publish a channel that failed.
 #
-# NOTE: the filename _consume-release.yml is load-bearing — npm trusted
-# publishing (OIDC) validates the top-level caller workflow filename, configured
-# on npmjs.com for every @temporal-architect/* package published here. Do NOT
-# rename it without updating the npm trusted-publisher config first.
+# No-publish check: dispatch with verify_trusted_publishing=true. Every publish
+# job is skipped; the VSIX registries only exchange an OIDC token, proving their
+# trusted-publisher registrations match. It runs in its own concurrency group,
+# so it never queues against (or displaces) a real release.
+#
+# Publishing runs only from main: a dispatch on any other ref fails unless it is
+# a verify run (the trusted-publisher registrations are not branch-bound).
+#
+# NOTE: the filename _consume-release.yml is load-bearing — npm and Open VSX
+# trusted publishing (OIDC) validate this top-level caller workflow filename,
+# and the VS Code Marketplace policy is registered against it too. Do NOT rename
+# it without updating every registry's trusted-publisher config first.
 
 on:
   push:
@@ -37,9 +45,14 @@ on:
         description: "Version to publish (defaults to the committed manifest version)"
         required: false
         type: string
+      verify_trusted_publishing:
+        description: "Publish nothing; only check the VSIX registries' trusted publishing (token exchange)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
-  group: publish-release
+  group: ${{ inputs.verify_trusted_publishing && 'verify-trusted-publishing' || 'publish-release' }}
   cancel-in-progress: false
 
 permissions:
@@ -55,6 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: v
+        env:
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           V="${{ github.event.inputs.version }}"
@@ -70,7 +85,13 @@ jobs:
           # whole fan-out. A manual dispatch always publishes, so a partially
           # failed release can be re-driven.
           publish=true
-          if [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
+          if [ "${{ inputs.verify_trusted_publishing }}" = "true" ]; then
+            echo "verify_trusted_publishing: publishing nothing."
+            publish=false
+          elif [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::refusing to publish from $REF — releases publish only from main (verify_trusted_publishing works from any ref)"
+            exit 1
+          elif [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
             echo "v$V is already published to npm — nothing to do."
             publish=false
           fi
@@ -88,12 +109,24 @@ jobs:
     # Independent of npm: the extension builds against the wire-types tarball from
     # the toolchain Release (see Makefile stamp-versions), not the published package.
     needs: [resolve-version, check-versions]
+    # Trusted publishing (OIDC) to both registries — no VSCE/OVSX tokens.
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/_publish-vsix.yml
     with:
       version: ${{ needs.resolve-version.outputs.version }}
-    secrets:
-      VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
-      OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+
+  verify-vsix-trusted-publishing:
+    needs: resolve-version
+    if: ${{ inputs.verify_trusted_publishing }}
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/_publish-vsix.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+      verify_only: true
 
   # npm channels authenticate via trusted publishing (OIDC) — no NPM_TOKEN.
   # npm validates the *calling* (top-level) workflow filename, so the trusted

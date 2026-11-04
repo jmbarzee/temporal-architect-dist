@@ -6,8 +6,8 @@ Actionable rollout for getting every distribution channel from "wired in CI" to 
 
 | Channel | CI wired | Account / token | First publish landed | Notes |
 |---|---|---|---|---|
-| VS Code Marketplace (`jmbarzee.twf-syntax`) | yes | yes (`VSCE_TOKEN`) | yes — last shipped `v0.3.2` | Listing's "View Source" link resolves to the renamed repo. |
-| Open VSX (`jmbarzee/twf-syntax`) | yes | yes (`OVSX_TOKEN`) | yes — last shipped `v0.3.2` | Same. |
+| VS Code Marketplace (`jmbarzee.twf-syntax`) | yes | OIDC trusted publishing (no token) | yes — last shipped `v0.3.2` | Listing's "View Source" link resolves to the renamed repo. |
+| Open VSX (`jmbarzee/twf-syntax`) | yes | OIDC trusted publishing (no token) | yes — last shipped `v0.3.2` | Same. |
 | GitHub Release assets (`twf-*`, `skills-*`, visualizer + wire-types tarballs, `SHA256SUMS`) | yes | (built-in) | **partial** — `v0.3.2` shipped only VSIX files; the binary archive + skills tarball + visualizer/wire-types wiring landed after `v0.3.2`. First end-to-end run will be the next `v*` tag. (`install.sh` is served from this repo via raw URL, not a Release asset.) |
 | npm `@temporal-architect/visualizer` + `@temporal-architect/wire-types` | n/a — **published from the toolchain repo** (`release.yml`), not here | OIDC trusted publishing (no token) | yes — last via the dist republish through `v0.9.3`; subsequent versions publish from the toolchain | Libraries publish from the repo that owns their identity; this repo only consumes their Release tarballs at build time. |
 | npm `@temporal-architect/twf` + 5 platform sub-packages | yes (`_publish-npm-twf.yml`) | yes (`NPM_TOKEN`, scope claimed) | no | First publish happens on next tag. **6 packages publish atomically per tag**; if any sub-package publish fails the wrapper's `optionalDependencies` resolution breaks for that platform. |

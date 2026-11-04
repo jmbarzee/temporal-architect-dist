@@ -26,6 +26,13 @@ WEB_UI_DIR := packages/web-ui
 # formula points (the toolchain releases twf; dist releases twf-view).
 DIST_REPO ?= jmbarzee/temporal-architect-dist
 
+# Extension registry CLIs for PUBLISHING, pinned: trusted publishing (OIDC) needs
+# vsce >= 4.1.0 (`--oidc`) and ovsx >= 1.2.0 (`--trusted-publishing`), both of
+# which require Node >= 22. Packaging (package-platform) deliberately keeps the
+# unpinned vsce it has always resolved on the build job's Node 20 (3.x).
+VSCE_PKG := @vscode/vsce@4.1.0
+OVSX_PKG := ovsx@1.3.0
+
 # Sibling toolchain checkout, used by `fetch-local`/`dev` for local F5 testing
 # against a live build (not a downloaded Release). Override if it lives elsewhere.
 TOOLCHAIN ?= ../temporal-architect
@@ -271,7 +278,7 @@ dev: fetch-local build-payload
 
 # ── VSIX (VS Code / Cursor / Open VSX) ───────────────────────────────────────
 
-.PHONY: build-extension package-platform publish-vscode publish-ovsx
+.PHONY: build-extension package-platform publish-vscode publish-ovsx verify-trusted-publishing
 
 ## Compile the extension TS (+ staged webview/skills). Builds the shared payload
 ## lib first and installs with --install-links so the committed file:../payload
@@ -288,21 +295,30 @@ package-platform: require-version stage-binary render-docs
 	cd $(EXT_DIR) && npx @vscode/vsce package --target $(VSCE_TARGET)
 	@echo "Packaged VSIX for $(VSCE_TARGET)"
 
-## Publish all platform VSIXes to VS Code Marketplace.
+## Publish all platform VSIXes to VS Code Marketplace. Trusted publishing (OIDC):
+## runs only in a GitHub Actions job with `id-token: write`, no token. Each VSIX
+## is its own token exchange, so any failure fails the target; --skip-duplicate
+## keeps a re-drive after a partial failure idempotent.
 publish-vscode:
-	@if [ -z "$(VSCE_TOKEN)" ]; then echo "Error: VSCE_TOKEN not set"; exit 1; fi
 	@for vsix in $(EXT_DIR)/*.vsix; do \
 		echo "Publishing $$vsix to VS Code Marketplace..."; \
-		(cd $(EXT_DIR) && npx @vscode/vsce publish --packagePath $$(basename $$vsix) -p $(VSCE_TOKEN)); \
+		(cd $(EXT_DIR) && npx $(VSCE_PKG) publish --oidc --skip-duplicate --packagePath $$(basename $$vsix)) || exit 1; \
 	done
 
-## Publish all platform VSIXes to Open VSX.
+## Publish all platform VSIXes to Open VSX. Trusted publishing (OIDC), as above.
 publish-ovsx:
-	@if [ -z "$(OVSX_TOKEN)" ]; then echo "Error: OVSX_TOKEN not set"; exit 1; fi
 	@for vsix in $(EXT_DIR)/*.vsix; do \
 		echo "Publishing $$vsix to Open VSX..."; \
-		npx ovsx publish $$vsix -p $(OVSX_TOKEN); \
+		npx $(OVSX_PKG) publish $$vsix --trusted-publishing --skip-duplicate || exit 1; \
 	done
+
+## Exchange this job's OIDC token with one registry (REGISTRY=vscode|ovsx) the way
+## the publish targets do, then stop: proves the trusted-publisher registration
+## matches without publishing anything.
+verify-trusted-publishing:
+	@dir=$$(mktemp -d) && \
+		npm install --prefix $$dir --no-save --no-audit --no-fund --silent $(VSCE_PKG) $(OVSX_PKG) && \
+		node scripts/verify-trusted-publishing.mjs $(REGISTRY) $$dir
 
 # ── npm wrapper + platform sub-packages ──────────────────────────────────────
 

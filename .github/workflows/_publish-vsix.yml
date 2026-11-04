@@ -4,9 +4,23 @@ name: _publish-vsix
 # skills + the visualizer library, from which the webview IIFE is built here),
 # then publish to VS Code Marketplace + Open VSX.
 #
-# The two registries publish in INDEPENDENT jobs: a failure on one (e.g. an
-# expired VS Code Marketplace PAT) must never block or skip the other. Open VSX
-# is the registry Cursor resolves from, so keeping it isolated is load-bearing.
+# The two registries publish in INDEPENDENT jobs: a failure on one must never
+# block or skip the other. Open VSX is the registry Cursor resolves from, so
+# keeping it isolated is load-bearing.
+#
+# Both registries authenticate via trusted publishing (OIDC) — no tokens. Each
+# holds a trusted-publisher registration for this repo. Open VSX matches the
+# OIDC `workflow_ref` claim — the top-level caller (_consume-release.yml), as
+# npm does — not this reusable file. The Marketplace docs don't say which file
+# its policy matches; the verify run below settles it (see packaging.md).
+# id-token:write must be granted on BOTH the caller job and the jobs below.
+#
+# The publish + verify jobs run Node 22 (the pinned vsce 4.x / ovsx 1.3 require
+# it); the build job stays on Node 20 so packaging is unchanged.
+#
+# verify_only skips the build and publish, and instead exchanges an OIDC token
+# with each registry and stops (make verify-trusted-publishing): a no-publish
+# check that the registrations match.
 
 on:
   workflow_call:
@@ -15,15 +29,18 @@ on:
         description: "Toolchain release version, e.g. 'v0.3.2'."
         type: string
         required: true
-    secrets:
-      VSCE_TOKEN:
-        required: true
-      OVSX_TOKEN:
-        required: true
+      verify_only:
+        description: "Only check trusted publishing (token exchange); build and publish nothing."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build VSIX (${{ matrix.vsce_target }})
+    if: ${{ !inputs.verify_only }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -58,11 +75,14 @@ jobs:
     name: Publish to VS Code Marketplace
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           pattern: vsix-*
@@ -70,18 +90,19 @@ jobs:
           path: packages/vscode/
       - name: Publish to VS Code Marketplace
         run: make publish-vscode
-        env:
-          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
 
   open-vsx:
     name: Publish to Open VSX
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           pattern: vsix-*
@@ -89,5 +110,21 @@ jobs:
           path: packages/vscode/
       - name: Publish to Open VSX
         run: make publish-ovsx
-        env:
-          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+
+  verify:
+    name: Verify trusted publishing (${{ matrix.registry }})
+    if: ${{ inputs.verify_only }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        registry: [vscode, ovsx]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: make verify-trusted-publishing REGISTRY=${{ matrix.registry }}
