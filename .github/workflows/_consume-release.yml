@@ -20,10 +20,13 @@ name: Publish Release
 # trusted-publisher registrations match. It runs in its own concurrency group,
 # so it never queues against (or displaces) a real release.
 #
-# NOTE: the filename _consume-release.yml is load-bearing — npm, Open VSX, and
-# VS Code Marketplace trusted publishing (OIDC) are registered against this
-# top-level caller workflow filename. Do NOT rename it without updating every
-# registry's trusted-publisher config first.
+# Publishing runs only from main: a dispatch on any other ref fails unless it is
+# a verify run (the trusted-publisher registrations are not branch-bound).
+#
+# NOTE: the filename _consume-release.yml is load-bearing — npm and Open VSX
+# trusted publishing (OIDC) validate this top-level caller workflow filename,
+# and the VS Code Marketplace policy is registered against it too. Do NOT rename
+# it without updating every registry's trusted-publisher config first.
 
 on:
   push:
@@ -83,6 +86,9 @@ jobs:
           if [ "${{ inputs.verify_trusted_publishing }}" = "true" ]; then
             echo "verify_trusted_publishing: publishing nothing."
             publish=false
+          elif [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::refusing to publish from ${{ github.ref }} — releases publish only from main (verify_trusted_publishing works from any ref)"
+            exit 1
           elif [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
             echo "v$V is already published to npm — nothing to do."
             publish=false

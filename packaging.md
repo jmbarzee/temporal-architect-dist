@@ -233,7 +233,7 @@ What `release.yml`'s reusable workflows expect, in one place:
 
 | Secret | Used by | Required for | Source |
 |---|---|---|---|
-| `VSCE_TOKEN` | (retired) VS Code Marketplace publishing uses OIDC trusted publishing (`vsce publish --oidc`) | — | no token; trusted-publishing policy at marketplace.visualstudio.com/manage → publisher `jmbarzee` → Trusted Publishing (repo `temporal-architect-dist`, workflow `_consume-release.yml`) |
+| `VSCE_TOKEN` | (retired) VS Code Marketplace publishing uses OIDC trusted publishing (`vsce publish --oidc`) | — | no token; trusted-publishing policy at marketplace.visualstudio.com/manage → publisher `jmbarzee` → Trusted Publishing (repo `temporal-architect-dist`, workflow `_consume-release.yml` — not yet confirmed whether the Marketplace matches the caller or the reusable `_publish-vsix.yml`; a `verify_trusted_publishing` dispatch of `_consume-release.yml` settles it) |
 | `OVSX_TOKEN` | (retired) Open VSX publishing uses OIDC trusted publishing (`ovsx publish --trusted-publishing`) | — | no token; trusted publisher at open-vsx.org/user-settings/trusted-publishers → namespace `jmbarzee` (repo `temporal-architect-dist`, workflow `_consume-release.yml`) |
 | `NPM_TOKEN` | (retired) npm publishing now uses OIDC trusted publishing — `@temporal-architect/twf*` + `claude-plugin` from this repo (`_consume-release.yml`), `visualizer` + `wire-types` from the toolchain (`release.yml`) | — | no token; configure GitHub Actions trusted publishers per package on npmjs.com |
 | `PYPI_TOKEN` | `_publish-pypi.yml` | every release | pypi.org → Account settings → API tokens |

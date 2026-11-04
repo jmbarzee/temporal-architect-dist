@@ -26,8 +26,10 @@ WEB_UI_DIR := packages/web-ui
 # formula points (the toolchain releases twf; dist releases twf-view).
 DIST_REPO ?= jmbarzee/temporal-architect-dist
 
-# Extension registry CLIs, pinned: trusted publishing (OIDC) needs vsce >= 4.1.0
-# (`--oidc`) and ovsx >= 1.2.0 (`--trusted-publishing`).
+# Extension registry CLIs for PUBLISHING, pinned: trusted publishing (OIDC) needs
+# vsce >= 4.1.0 (`--oidc`) and ovsx >= 1.2.0 (`--trusted-publishing`), both of
+# which require Node >= 22. Packaging (package-platform) deliberately keeps the
+# unpinned vsce it has always resolved on the build job's Node 20 (3.x).
 VSCE_PKG := @vscode/vsce@4.1.0
 OVSX_PKG := ovsx@1.3.0
 
@@ -290,22 +292,24 @@ build-extension: require-version build-payload
 ## Package a single-platform VSIX. Stages the binary first.
 ## Usage: make package-platform VSCE_TARGET=darwin-arm64 GOOS=darwin GOARCH=arm64
 package-platform: require-version stage-binary render-docs
-	cd $(EXT_DIR) && npx $(VSCE_PKG) package --target $(VSCE_TARGET)
+	cd $(EXT_DIR) && npx @vscode/vsce package --target $(VSCE_TARGET)
 	@echo "Packaged VSIX for $(VSCE_TARGET)"
 
 ## Publish all platform VSIXes to VS Code Marketplace. Trusted publishing (OIDC):
-## runs only in a GitHub Actions job with `id-token: write`, no token.
+## runs only in a GitHub Actions job with `id-token: write`, no token. Each VSIX
+## is its own token exchange, so any failure fails the target; --skip-duplicate
+## keeps a re-drive after a partial failure idempotent.
 publish-vscode:
 	@for vsix in $(EXT_DIR)/*.vsix; do \
 		echo "Publishing $$vsix to VS Code Marketplace..."; \
-		(cd $(EXT_DIR) && npx $(VSCE_PKG) publish --oidc --packagePath $$(basename $$vsix)); \
+		(cd $(EXT_DIR) && npx $(VSCE_PKG) publish --oidc --skip-duplicate --packagePath $$(basename $$vsix)) || exit 1; \
 	done
 
 ## Publish all platform VSIXes to Open VSX. Trusted publishing (OIDC), as above.
 publish-ovsx:
 	@for vsix in $(EXT_DIR)/*.vsix; do \
 		echo "Publishing $$vsix to Open VSX..."; \
-		npx $(OVSX_PKG) publish $$vsix --trusted-publishing; \
+		npx $(OVSX_PKG) publish $$vsix --trusted-publishing --skip-duplicate || exit 1; \
 	done
 
 ## Exchange this job's OIDC token with one registry (REGISTRY=vscode|ovsx) the way
