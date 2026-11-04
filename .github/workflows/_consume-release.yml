@@ -68,6 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: v
+        env:
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           V="${{ github.event.inputs.version }}"
@@ -86,8 +88,8 @@ jobs:
           if [ "${{ inputs.verify_trusted_publishing }}" = "true" ]; then
             echo "verify_trusted_publishing: publishing nothing."
             publish=false
-          elif [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "::error::refusing to publish from ${{ github.ref }} — releases publish only from main (verify_trusted_publishing works from any ref)"
+          elif [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::refusing to publish from $REF — releases publish only from main (verify_trusted_publishing works from any ref)"
             exit 1
           elif [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
             echo "v$V is already published to npm — nothing to do."
