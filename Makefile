@@ -114,8 +114,8 @@ stamp-committed-versions: require-version
 	@# @temporal-architect/payload + serve — new dist-owned npm packages. Stamp
 	@# their versions, and serve's runtime pins on payload + twf, so serve@$(VER)
 	@# resolves payload@$(VER) + twf@$(VER). (The VS Code extension consumes payload
-	@# via a committed file:../payload path — bundled into the VSIX with npm
-	@# --install-links — so it is never version-stamped here.)
+	@# via a committed file:../payload path — packed and bundled into the VSIX by
+	@# build-extension — so it is never version-stamped here.)
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/payload/package.json && rm -f packages/payload/package.json.bak
 	@sed -i.bak 's/"version": *"[^"]*"/"version": "$(VER)"/' packages/serve/package.json && rm -f packages/serve/package.json.bak
 	@sed -i.bak 's|"@temporal-architect/payload": *"[^"]*"|"@temporal-architect/payload": "$(VER)"|' packages/serve/package.json && rm -f packages/serve/package.json.bak
@@ -281,12 +281,17 @@ dev: fetch-local build-payload
 .PHONY: build-extension package-platform publish-vscode publish-ovsx verify-trusted-publishing
 
 ## Compile the extension TS (+ staged webview/skills). Builds the shared payload
-## lib first and installs with --install-links so the committed file:../payload
-## dep is COPIED into node_modules (a symlink would be dropped by vsce, leaving
-## payload out of the VSIX). wire-types is a type-only dep staged to a file:
-## tarball by stamp-versions.
+## lib first, packs it, and repoints the extension's committed file:../payload
+## dep at that tarball, so payload is a real copy in node_modules. A symlink
+## would be dropped by vsce, and an --install-links copy of a file: directory dep
+## is reported "invalid" by the `npm list` vsce runs, failing `vsce package`.
+## Like the wire-types tarball staged by stamp-versions, this rewrite points at
+## dist-assets/ and is build-only — never commit it.
 build-extension: require-version build-payload
-	cd $(EXT_DIR) && npm install --no-audit --no-fund --install-links && npm run compile
+	@mkdir -p $(ASSETS)
+	@tgz=$$(cd packages/payload && npm pack --pack-destination ../../$(ASSETS) --silent | tail -1) && \
+		cd $(EXT_DIR) && npm pkg set "dependencies.@temporal-architect/payload=file:../../$(ASSETS)/$$tgz"
+	cd $(EXT_DIR) && npm install --no-audit --no-fund && npm run compile
 	@echo "Compiled extension"
 
 ## Package a single-platform VSIX. Stages the binary first.
