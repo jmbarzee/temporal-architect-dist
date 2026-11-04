@@ -15,6 +15,11 @@ name: Publish Release
 # Manual re-run: "Run workflow" (workflow_dispatch), optionally overriding the
 # version, e.g. to re-publish a channel that failed.
 #
+# VSIX-only re-drive: dispatch from main with vsix_only=true (and the version)
+# to publish ONLY the extension to VS Code Marketplace + Open VSX — every other
+# channel is skipped, so a failed extension publish can be retried without
+# re-running npm, PyPI, brew, or twf-view (whose release upload --clobbers).
+#
 # No-publish check: dispatch with verify_trusted_publishing=true. Every publish
 # job is skipped; the VSIX registries only exchange an OIDC token, proving their
 # trusted-publisher registrations match. It runs in its own concurrency group,
@@ -50,6 +55,11 @@ on:
         required: false
         type: boolean
         default: false
+      vsix_only:
+        description: "Publish ONLY the VSIX (VS Code Marketplace + Open VSX); skip every other channel"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ inputs.verify_trusted_publishing && 'verify-trusted-publishing' || 'publish-release' }}
@@ -65,6 +75,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       publish: ${{ steps.v.outputs.publish }}
+      vsix_only: ${{ steps.v.outputs.vsix_only }}
     steps:
       - uses: actions/checkout@v4
       - id: v
@@ -85,18 +96,24 @@ jobs:
           # whole fan-out. A manual dispatch always publishes, so a partially
           # failed release can be re-driven.
           publish=true
+          vsix_only=false
           if [ "${{ inputs.verify_trusted_publishing }}" = "true" ]; then
             echo "verify_trusted_publishing: publishing nothing."
             publish=false
           elif [ "$REF" != "refs/heads/main" ]; then
             echo "::error::refusing to publish from $REF — releases publish only from main (verify_trusted_publishing works from any ref)"
             exit 1
+          elif [ "${{ inputs.vsix_only }}" = "true" ]; then
+            echo "vsix_only: publishing only the VSIX."
+            publish=false
+            vsix_only=true
           elif [ "${{ github.event_name }}" = "push" ] && npm view "@temporal-architect/twf@$V" version >/dev/null 2>&1; then
             echo "v$V is already published to npm — nothing to do."
             publish=false
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "Resolved v$V (publish=$publish)"
+          echo "vsix_only=$vsix_only" >> "$GITHUB_OUTPUT"
+          echo "Resolved v$V (publish=$publish, vsix_only=$vsix_only)"
 
   check-versions:
     needs: resolve-version
@@ -110,6 +127,26 @@ jobs:
     # the toolchain Release (see Makefile stamp-versions), not the published package.
     needs: [resolve-version, check-versions]
     # Trusted publishing (OIDC) to both registries — no VSCE/OVSX tokens.
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/_publish-vsix.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+
+  # vsix_only re-drive: the same pre-flight + VSIX publish as a full release,
+  # gated on its own output so no other channel's job (all of which need the
+  # full-release check-versions above) can run.
+  check-versions-vsix-only:
+    needs: resolve-version
+    if: needs.resolve-version.outputs.vsix_only == 'true'
+    uses: ./.github/workflows/_check-versions.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+
+  publish-vsix-only:
+    needs: [resolve-version, check-versions-vsix-only]
+    if: needs.resolve-version.outputs.vsix_only == 'true'
     permissions:
       id-token: write
       contents: read

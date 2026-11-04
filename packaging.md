@@ -101,7 +101,10 @@ toolchain dispatch payload. `make stamp-versions VERSION=X.Y.Z` writes it into e
 build time; `make check-versions VERSION=X.Y.Z` asserts it took.
 
 **Manual re-run.** Use the **Run workflow** button on *Consume Release* (`_consume-release.yml`,
-`workflow_dispatch`) with a version (e.g. `v0.3.2`) to re-publish — useful if a single channel failed.
+`workflow_dispatch`, from `main`) with a version (e.g. `v0.3.2`). A plain dispatch re-runs **every**
+channel: npm and PyPI fail on the already-published duplicates, and twf-view's
+`gh release upload --clobber` overwrites that release's archives with a rebuild (which can break the
+Homebrew sha256). To re-drive only a failed extension publish, add `vsix_only=true`.
 
 **Registry identifiers** (unchanged by the repo split): npm scope `@temporal-architect`, PyPI project
 `twf-cli`, VSIX id `jmbarzee.twf-syntax`. Manifests set `homepage` → the toolchain repo (the front
