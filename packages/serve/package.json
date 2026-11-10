@@ -1,7 +1,7 @@
 {
   "name": "@temporal-architect/serve",
   "version": "0.16.0",
-  "description": "Serve the Temporal Architect visualizer over local HTTP, live-reloading as your `.twf` files change. `npx @temporal-architect/serve <tree>` — the Node/npx sibling of the Go `twf-view` binary: it subprocesses the `twf` CLI, assembles the graph payload, and serves the shared visualizer over SSE.",
+  "description": "Live local visualizer for .twf Temporal system designs, in your browser.",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
   "repository": {

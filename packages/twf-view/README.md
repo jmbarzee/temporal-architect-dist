@@ -1,7 +1,8 @@
 # twf-view
 
-Live [temporal-architect](https://github.com/jmbarzee/temporal-architect) design
-visualizer over a local HTTP server — the visualizer's **second host**.
+Live visualizer for [temporal-architect](https://github.com/jmbarzee/temporal-architect)
+— design, visualize, and implement entire Temporal systems in every Temporal SDK —
+over a local HTTP server.
 
 `twf-view` parses a set of `.twf` files **in-process** (importing the toolchain's
 `tools/lsp/pipeline` as a library — no subprocess, no version skew), serves the
