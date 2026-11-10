@@ -92,18 +92,13 @@ limitations in view.
 ## The compose pipeline
 
 Each listing is `[channel header] + [the component fragments its matrix row marks
-✅]`; `AGENTS.md` "How it works" is the operator's view. Each fragment travels
-inside the Release artifact it covers, and `make stage-docs` extracts it into
-`dist-assets/docs/`:
+✅]`; `AGENTS.md` "How it works" covers rendering and stamping. Each fragment
+travels inside the Release artifact it covers, and `make stage-docs` extracts it
+into `dist-assets/docs/`:
 
 - **global, parser, mcp** — `docs/*.md` in every `twf-v*` binary archive.
 - **visualizer** — `FRAGMENT.md` in the npm `visualizer` tgz.
 - **skills** — frontmatter in the skills tarball, rendered as `{{skills}}`.
 
-`make render-docs` (`docs/render.mjs`) composes the four package READMEs
-(gitignored) and the committed root `README.md` from `docs/templates/*.md`,
-rewriting image refs to release-pinned `raw.githubusercontent.com` URLs. Short
-descriptions are stamped by `stamp-versions` (`docs/stamp-descriptions.mjs`) from
-`docs/descriptions.json`; `publish-brew` passes the Homebrew `desc` to
-`bump-brew`. When a target needs distinct framing, thicken its header rather
-than splitting a fragment.
+When a target needs distinct framing, thicken its header rather than splitting a
+fragment.

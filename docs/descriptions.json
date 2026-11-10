@@ -1,6 +1,6 @@
 {
   "__comment": "Per-target short `description` fields for channels whose description is embedded in a BUILD ARTIFACT (stamped by stamp-descriptions.mjs) or passed to a generator (homebrew -> publish-brew -> bump-brew). The canonical vision one-liner lives in the toolchain fragment frontmatter (docs/fragments/global.md); use the literal \"@global\" to inherit it, anything else is a deliberate channel-specific override. NOT here: .claude-plugin/marketplace.json, which Claude reads from git (not a build artifact) — its description is committed/hand-maintained. See documentation_propagation.md.",
-  "vscode": "Design and visualize entire Temporal systems — namespaces, workers, workflows, and Nexus — in `.twf`, then implement them in every Temporal SDK, with a language server and per-SDK authoring skills.",
+  "vscode": "Design and visualize entire Temporal systems — namespaces, workers, workflows, and Nexus — in `.twf` with a language server, then implement them in every Temporal SDK with per-SDK authoring skills.",
   "npm-twf": "Design and validate entire Temporal systems in every Temporal SDK — the `.twf` CLI, language server, and MCP server.",
   "pypi": "Design and validate entire Temporal systems in every Temporal SDK — the .twf CLI, language server, and MCP server.",
   "claude-plugin": "Claude Code plugin payload for temporal-architect: design, visualize, and implement entire Temporal systems in every Temporal SDK — design, per-SDK authoring, and infra-provisioning skills, plus the twf MCP server.",
