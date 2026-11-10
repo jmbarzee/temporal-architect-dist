@@ -1,7 +1,7 @@
 {
   "name": "@temporal-architect/twf",
   "version": "0.16.0",
-  "description": "Toolchain for designing and validating entire Temporal systems in `.twf` — CLI, language server, and MCP server.",
+  "description": "Design and validate entire Temporal systems in every Temporal SDK — the `.twf` CLI, language server, and MCP server.",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
   "repository": {
@@ -20,7 +20,8 @@
     "system design",
     "mcp",
     "lsp",
-    "cli"
+    "cli",
+    "temporal-sdk"
   ],
   "bin": {
     "twf": "bin/twf.js"

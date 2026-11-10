@@ -10,7 +10,7 @@ Search for **"Temporal Architect"** in the VS Code or Cursor extension marketpla
 
 - **Live diagnostics** — undefined activities, broken references, duplicate definitions, and determinism traps flagged as you type, plus completions, hover, go-to-definition, references, and rename.
 - **Interactive visualizer** — open any `.twf` file as a Graph View or Tree View from the editor title bar or command palette.
-- **System-design skills** — Design, Go authoring, and Infra provisioning, available to your AI agent.
+- **System-design skills** — Design, per-SDK authoring, and infra provisioning, available to your AI agent.
 - **Bundled `twf` CLI** — the same parser/LSP binary on your PATH. Pair it with the sampler to recover a deployment graph from sampled production history (open the resulting `observed-graph.json` folder in the visualizer).
 
 ## Commands
@@ -20,6 +20,7 @@ Search for **"Temporal Architect"** in the VS Code or Cursor extension marketpla
 | **TWF: Visualize Workflow** | Open the interactive visualizer for the current `.twf` file |
 | **TWF: Visualize All Workflows in Folder** | Visualize all `.twf` files in a folder |
 | **Temporal Architect: Install Skills** | Re-install the system-design skills to `~/.cursor/skills/` |
+| **Temporal Architect: Register MCP Server** | Register the bundled `twf mcp` server in `~/.cursor/mcp.json` |
 
 {{fragment:visualizer}}
 

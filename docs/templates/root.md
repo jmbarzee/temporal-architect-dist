@@ -4,14 +4,16 @@
 
 ## Install
 
-Pick the channel that fits your workflow — every one ships the same `twf` engine (parser, language server, and MCP server) at the same version.
+Pick the channel that fits your workflow — every one runs the same `twf` engine at the same version.
 
 | Channel | Install |
 |---|---|
-| **VS Code / Cursor** — extension with live diagnostics, the interactive visualizer, and the system-design skills | Search **"Temporal Architect"** in the VS Code Marketplace or Open VSX |
+| **VS Code / Cursor** — extension with live diagnostics, the interactive visualizer, and the system-design skills | Search **"Temporal Architect"** in the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jmbarzee.twf-syntax) or [Open VSX](https://open-vsx.org/extension/jmbarzee/twf-syntax) |
 | **npm** — `@temporal-architect/twf` (CLI + language server + MCP server) | `npm install -g @temporal-architect/twf` — or zero-install with `npx -y @temporal-architect/twf` |
 | **PyPI** — `twf-cli` (same binary, `pip`-installable) | `pip install twf-cli` |
 | **Homebrew** | `brew install jmbarzee/twf/twf` |
+| **`twf-view`** — the live visualizer as one binary, reloading as your `.twf` files change | `brew install jmbarzee/twf/twf-view` — or `go install github.com/jmbarzee/temporal-architect-dist/packages/twf-view@latest` |
+| **npm** — `@temporal-architect/serve` (the live visualizer over `npx`) | `npx @temporal-architect/serve path/to/design/` |
 | **Claude Code plugin** — the design/author/infra skills plus the `twf` MCP server | `/plugin marketplace add jmbarzee/temporal-architect-dist` then `/plugin install temporal-architect@temporal-architect` |
 
 Prefer a one-liner? The shell installer downloads the platform binary from the latest release:

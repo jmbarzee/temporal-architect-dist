@@ -1,7 +1,7 @@
 {
   "name": "twf-syntax",
   "displayName": "Temporal Architect",
-  "description": "Design, visualize, and implement entire Temporal systems in `.twf` — namespaces, workers, workflows, and Nexus — with a deterministic language server and an interactive architecture visualizer. Covers activities, child workflows, signals, queries, updates, timers, promises, and Nexus.",
+  "description": "Design and visualize entire Temporal systems — namespaces, workers, workflows, and Nexus — in `.twf`, then implement them in every Temporal SDK, with a language server and per-SDK authoring skills.",
   "version": "0.16.0",
   "publisher": "jmbarzee",
   "license": "MIT",
@@ -35,7 +35,16 @@
     "timers",
     "promises",
     "nexus",
-    "visualization"
+    "visualization",
+    "temporal-sdk",
+    "go",
+    "typescript",
+    "python",
+    "java",
+    "dotnet",
+    "ruby",
+    "php",
+    "rust"
   ],
   "icon": "icon.png",
   "main": "./out/extension.js",
