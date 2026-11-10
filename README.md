@@ -4,7 +4,7 @@
 
 Write your architecture in `.twf` and a real parser, language server, and visualizer give you (and your AI agent) compiler-grade feedback on the *whole system* before you write a line of SDK code — then generate the workers and provision the infra from the same design.
 
-![Graph View — the whole system as a force-directed graph of namespaces, workers, and workflows with dependency edges](https://raw.githubusercontent.com/jmbarzee/temporal-architect/v0.11.0/docs/images/graph-view-system.png)
+![Graph View — the whole system as a force-directed graph of namespaces, workers, and workflows with dependency edges](https://raw.githubusercontent.com/jmbarzee/temporal-architect/v0.16.0/docs/images/graph-view-system.png)
 
 - **Catch design errors before code.** A real parser and language server validate the whole system — undefined activities, broken Nexus routing, misplaced determinism — while it's still a design, not a production incident.
 - **See the whole deployment.** An interactive graph of namespaces → workers → workflows, plus a tree view that expands calls inline. Architecture you can actually look at.
@@ -13,44 +13,46 @@ Write your architecture in `.twf` and a real parser, language server, and visual
 
 ```twf
 activity ReserveFunds(amount: Money) -> (Hold):
-    reserve(amount)
+	reserve(amount)
 
 activity CaptureFunds(hold: Hold) -> (Receipt):
-    capture(hold)
+	capture(hold)
 
 workflow ChargeOrder(order: Order) -> (Receipt):
-    signal Cancel():
-        close fail("cancelled")
+	signal Cancel():
+		close fail("cancelled")
 
-    activity ReserveFunds(order.amount) -> hold
-        options:
-            start_to_close_timeout: 30s
-    activity CaptureFunds(hold) -> receipt
-    close complete(receipt)
+	activity ReserveFunds(order.amount) -> hold
+		options:
+			start_to_close_timeout: 30s
+	activity CaptureFunds(hold) -> receipt
+	close complete(receipt)
 
 worker billing:
-    workflow ChargeOrder
-    activity ReserveFunds
-    activity CaptureFunds
+	workflow ChargeOrder
+	activity ReserveFunds
+	activity CaptureFunds
 
 namespace payments:
-    worker billing
-        options:
-            task_queue: "billing"
+	worker billing
+		options:
+			task_queue: "billing"
 ```
 
 Workflow logic, the worker that hosts it, and the namespace topology — one readable file.
 
 ## Install
 
-Pick the channel that fits your workflow — every one ships the same `twf` engine (parser, language server, and MCP server) at the same version.
+Pick the channel that fits your workflow — every one runs the same `twf` engine at the same version.
 
 | Channel | Install |
 |---|---|
-| **VS Code / Cursor** — extension with live diagnostics, the interactive visualizer, and the system-design skills | Search **"Temporal Architect"** in the VS Code Marketplace or Open VSX |
+| **VS Code / Cursor** — extension with live diagnostics, the interactive visualizer, and the system-design skills | Search **"Temporal Architect"** in the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jmbarzee.twf-syntax) or [Open VSX](https://open-vsx.org/extension/jmbarzee/twf-syntax) |
 | **npm** — `@temporal-architect/twf` (CLI + language server + MCP server) | `npm install -g @temporal-architect/twf` — or zero-install with `npx -y @temporal-architect/twf` |
 | **PyPI** — `twf-cli` (same binary, `pip`-installable) | `pip install twf-cli` |
 | **Homebrew** | `brew install jmbarzee/twf/twf` |
+| **`twf-view`** — the live visualizer as one binary, reloading as your `.twf` files change | `brew install jmbarzee/twf/twf-view` — or `go install github.com/jmbarzee/temporal-architect-dist/packages/twf-view@latest` |
+| **npm** — `@temporal-architect/serve` (the live visualizer over `npx`) | `npx @temporal-architect/serve path/to/design/` |
 | **Claude Code plugin** — the design/author/infra skills plus the `twf` MCP server | `/plugin marketplace add jmbarzee/temporal-architect-dist` then `/plugin install temporal-architect@temporal-architect` |
 
 Prefer a one-liner? The shell installer downloads the platform binary from the latest release:

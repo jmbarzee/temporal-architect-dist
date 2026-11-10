@@ -35,7 +35,7 @@ npx -y @temporal-architect/twf check workflows.twf
 
 ## Versioning
 
-Versions track the upstream `temporal-architect` Git tag, so `0.3.x` of this package corresponds to `v0.3.x` of the toolchain.
+Versions track the upstream `temporal-architect` Git tag, so `X.Y.Z` of this package corresponds to `vX.Y.Z` of the toolchain.
 
 ## License
 
