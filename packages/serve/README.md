@@ -1,7 +1,8 @@
 # @temporal-architect/serve
 
-Serve the [Temporal Architect](https://github.com/jmbarzee/temporal-architect)
-visualizer over local HTTP, live-reloading as your `.twf` files change.
+Live visualizer for [temporal-architect](https://github.com/jmbarzee/temporal-architect)
+— design, visualize, and implement entire Temporal systems in every Temporal SDK —
+over local HTTP.
 
 ```bash
 npx @temporal-architect/serve path/to/design/
