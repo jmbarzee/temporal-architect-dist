@@ -10,7 +10,7 @@
         "package": "@temporal-architect/claude-plugin"
       },
       "strict": false,
-      "version": "0.17.0",
+      "version": "0.17.1",
       "description": "Design, visualize, and implement entire Temporal systems in every Temporal SDK — design, per-SDK authoring, and infra-provisioning skills, plus the twf MCP server.",
       "author": { "name": "jmbarzee" },
       "license": "MIT",
@@ -22,7 +22,7 @@
       "mcpServers": {
         "twf": {
           "command": "npx",
-          "args": ["-y", "@temporal-architect/twf@0.17.0", "mcp"]
+          "args": ["-y", "@temporal-architect/twf@0.17.1", "mcp"]
         }
       }
     }
