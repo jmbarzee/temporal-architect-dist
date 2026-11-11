@@ -77,20 +77,23 @@ function loadFragments(docsDir) {
 }
 
 // Compose the skills bullet list from staged SKILL.md frontmatter. The trigger
-// clause ("Use when …") is dropped so the listing reads as a pitch.
+// clause ("Use when …") is dropped so the listing reads as a pitch. The per-SDK
+// author skills fold into one bullet; the global fragment lists the SDKs.
 function renderSkills(skillsDir) {
   if (!existsSync(skillsDir)) throw new Error(`missing staged skills: ${skillsDir} (run 'make stage-docs')`);
-  const rows = [];
+  const rows = new Set();
   for (const entry of readdirSync(skillsDir).sort()) {
     const skillMd = join(skillsDir, entry, "SKILL.md");
     if (!existsSync(skillMd) || !statSync(join(skillsDir, entry)).isDirectory()) continue;
     const { meta } = parseFragment(readFileSync(skillMd, "utf8"));
     if (!meta.name || !meta.description) continue;
     const pitch = meta.description.split(/\.\s+Use\b/)[0].replace(/\.*$/, "");
-    rows.push(`- **${meta.name}** — ${pitch}.`);
+    rows.add(/^temporal-architect-author-(?!infra$)/.test(meta.name)
+      ? "- **`temporal-architect-author-<sdk>`** — Generate tested code from a `.twf` design, one skill for each SDK above."
+      : `- **${meta.name}** — ${pitch}.`);
   }
-  if (!rows.length) throw new Error(`no SKILL.md frontmatter found under ${skillsDir}`);
-  return rows.join("\n");
+  if (!rows.size) throw new Error(`no SKILL.md frontmatter found under ${skillsDir}`);
+  return [...rows].join("\n");
 }
 
 function render(templateText, frags, skills, imageBase) {
