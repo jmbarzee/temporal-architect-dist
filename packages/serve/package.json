@@ -1,6 +1,6 @@
 {
   "name": "@temporal-architect/serve",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Live local visualizer for .twf Temporal system designs, in your browser.",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
@@ -41,8 +41,8 @@
     "postpack": "rm -f LICENSE"
   },
   "dependencies": {
-    "@temporal-architect/payload": "0.16.0",
-    "@temporal-architect/twf": "0.16.0",
+    "@temporal-architect/payload": "0.17.0",
+    "@temporal-architect/twf": "0.17.0",
     "chokidar": "^3.6.0"
   },
   "devDependencies": {
