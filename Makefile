@@ -193,7 +193,10 @@ stage-skills: require-version
 ## visualizer library (consumed from the toolchain Release tarball, file:, so the
 ## VSIX build never waits on an npm publish) in the host glue and bundle a single
 ## IIFE the extension loads. Self-stamps the visualizer dep to the downloaded
-## tarball, then installs + builds.
+## tarball, then installs + builds. The visualizer's wire-types dependency comes
+## from the wire-types tarball in $(ASSETS), in release and dev builds alike, so
+## neither waits on npm, which never serves a dev version (--no-save: never a
+## committed dep).
 build-vscode-ui: require-version
 	@sed -i.bak 's|\("@temporal-architect/visualizer": *\)"[^"]*"|\1"file:../../$(ASSETS)/temporal-architect-visualizer-$(VER).tgz"|' packages/vscode-ui/package.json && rm -f packages/vscode-ui/package.json.bak
 	@# The dev flow reuses a constant git-describe --dirty version, so the
@@ -203,7 +206,7 @@ build-vscode-ui: require-version
 	@# Install the rest with the lock disabled (no integrity gate), then drop the
 	@# freshly-built lib straight into node_modules ourselves so its content is
 	@# always current. Release builds use unique versions and are unaffected.
-	cd packages/vscode-ui && npm install --no-audit --no-fund --no-package-lock
+	cd packages/vscode-ui && npm install --no-audit --no-fund --no-package-lock --no-save ../../$(ASSETS)/temporal-architect-wire-types-$(VER).tgz
 	@rm -rf packages/vscode-ui/node_modules/@temporal-architect/visualizer
 	@mkdir -p packages/vscode-ui/node_modules/@temporal-architect/visualizer
 	tar xzf $(ASSETS)/temporal-architect-visualizer-$(VER).tgz -C packages/vscode-ui/node_modules/@temporal-architect/visualizer --strip-components=1
