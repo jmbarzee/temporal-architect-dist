@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "twf-cli"
-version = "0.17.0"
+version = "0.17.1"
 description = "Design and validate entire Temporal systems in every Temporal SDK — the .twf CLI, language server, and MCP server."
 readme = "README.md"
 license = { text = "MIT" }
