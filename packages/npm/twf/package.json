@@ -1,6 +1,6 @@
 {
   "name": "@temporal-architect/twf",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Design and validate entire Temporal systems in every Temporal SDK — the `.twf` CLI, language server, and MCP server.",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
@@ -39,11 +39,11 @@
     "postpack": "rm -f LICENSE"
   },
   "optionalDependencies": {
-    "@temporal-architect/twf-darwin-arm64": "0.16.0",
-    "@temporal-architect/twf-darwin-x64": "0.16.0",
-    "@temporal-architect/twf-linux-x64": "0.16.0",
-    "@temporal-architect/twf-linux-arm64": "0.16.0",
-    "@temporal-architect/twf-win32-x64": "0.16.0"
+    "@temporal-architect/twf-darwin-arm64": "0.17.0",
+    "@temporal-architect/twf-darwin-x64": "0.17.0",
+    "@temporal-architect/twf-linux-x64": "0.17.0",
+    "@temporal-architect/twf-linux-arm64": "0.17.0",
+    "@temporal-architect/twf-win32-x64": "0.17.0"
   },
   "publishConfig": {
     "access": "public"

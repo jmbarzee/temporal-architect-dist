@@ -1,4 +1,4 @@
-github.com/jmbarzee/temporal-architect/tools/lsp v0.16.0 h1:7UDBwcsw4fmg1i1aXBosxs2eGLgU0MzIA3UveZyt1RE=
-github.com/jmbarzee/temporal-architect/tools/lsp v0.16.0/go.mod h1:35i23Qe9Ae4yynEaZ5KfGoxFcWUsZCtBIUX60Hr0mxw=
+github.com/jmbarzee/temporal-architect/tools/lsp v0.17.0 h1:8PhYX6XaWDNg0q91HDDXhDGdjCxO9l/T+U0+MbySGaE=
+github.com/jmbarzee/temporal-architect/tools/lsp v0.17.0/go.mod h1:35i23Qe9Ae4yynEaZ5KfGoxFcWUsZCtBIUX60Hr0mxw=
 golang.org/x/mod v0.30.0 h1:fDEXFVZ/fmCKProc/yAXXUijritrDzahmwwefnjoPFk=
 golang.org/x/mod v0.30.0/go.mod h1:lAsf5O2EvJeSFMiBxXDki7sCgAxEUcZHXoXMKT4GJKc=

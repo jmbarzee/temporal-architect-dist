@@ -1,6 +1,6 @@
 {
   "name": "@temporal-architect/payload",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Host-agnostic toolchain interpretation: run the `twf` CLI over a `.twf` file set and assemble the visualizer wire payload (`{ ast, parserGraph, decomposition }`). Shared by the VS Code extension and `@temporal-architect/serve` so the two subprocess hosts never drift.",
   "license": "MIT",
   "homepage": "https://github.com/jmbarzee/temporal-architect",
